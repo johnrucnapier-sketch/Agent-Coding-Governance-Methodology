@@ -3,6 +3,8 @@
 **A governance system for multi-session, long-horizon AI development.**
 **Works with both Claude Code and Codex (and any agent) — two parallel one-command-ish paths.**
 
+[![Code: MIT](https://img.shields.io/badge/code-MIT-green.svg)](LICENSING.md) [![Docs: CC--BY--4.0](https://img.shields.io/badge/docs-CC--BY--4.0-blue.svg)](LICENSING.md) [![Dual-license](https://img.shields.io/badge/license-dual--track-lightgrey.svg)](LICENSING.md)
+
 > English first (full). 中文完整版在下半部分 — scroll past the English.
 
 ---
