@@ -12,7 +12,7 @@ uses two licenses. The `license` field in `.claude-plugin/plugin.json` is set to
 | Path / 路径 | License | File |
 |---|---|---|
 | `METHODOLOGY.md`, `METHODOLOGY.en.md` | CC-BY-4.0 | `LICENSE-DOCS` |
-| `README.md`, `README.en.md` | CC-BY-4.0 | `LICENSE-DOCS` |
+| `README.md` | CC-BY-4.0 | `LICENSE-DOCS` |
 | `skills/**/SKILL.md` (prose body) | CC-BY-4.0 | `LICENSE-DOCS` |
 | `LICENSING.md` | CC-BY-4.0 | `LICENSE-DOCS` |
 | `scripts/**` | MIT | `LICENSE-CODE` |
