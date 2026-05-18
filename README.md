@@ -1,15 +1,19 @@
-# Claude Code Governance —— AI 多会话开发治理体系 / a governance system for multi-session AI development
+# Agent Coding Governance —— AI 多会话开发治理体系 / a governance system for multi-session AI development
+
+> **同时支持 Claude Code 与 Codex(及任意 agent)——两条并列的一键路径。**
+> **Works with both Claude Code and Codex (and any agent) — two parallel one-command paths.**
 
 > 中英逐段对照,单文件。 / Chinese and English, interleaved section by section, single file.
 
 > 一句话:AI 驱动的长周期开发会**结构性地腐化**——除非有治理。
-> 这是一套从真实项目(十几个版本、数十 session、~20 亿 token 踩坑)提炼的可迁移治理逻辑 + 可直接用的 Claude Code skill 套件。
+> 这是一套从真实项目(十几个版本、数十 session、~20 亿 token 踩坑)提炼的可迁移治理逻辑:Claude Code 走插件(运行时自动),Codex / 任意 agent 走一键脚手架(之后 agent 每 session 自动读 `AGENTS.md`)。
 >
 > One sentence: long-horizon AI-driven development **rots structurally** — unless
 > there is governance.
 > This is a migratable governance logic distilled from a real project (a dozen-plus
-> versions, dozens of sessions, ~2B tokens of mistakes) + a ready-to-use Claude Code
-> plugin.
+> versions, dozens of sessions, ~2B tokens of mistakes): a Claude Code plugin
+> (runtime-automatic) + a one-command scaffold for Codex / any agent (which then
+> auto-reads `AGENTS.md` every session).
 
 ---
 
@@ -134,7 +138,8 @@ METHODOLOGY.md / METHODOLOGY.en.md ← 完整方法论(八原则 + bootstrap 配
   plugin.json                      ← 本仓即一个 Claude Code plugin
   marketplace.json                 ← 供 /plugin marketplace add 安装
 hooks/hooks.json                   ← SessionStart hook(唯一自动机制)
-scripts/grounding-inject.sh        ← hook 注入薄 grounding 指令,指向下面 skills
+scripts/grounding-inject.sh        ← (CC)hook 注入薄 grounding 指令,指向下面 skills
+scripts/governance-init.sh         ← (Codex/任意 agent)一键脚手架:铺 AGENTS.md/宪法/指针
 skills/
   session-grounding/SKILL.md       ← 调用时机:session 启动/续接,5步grounding+先报告
   truth-first/SKILL.md             ← 调用时机:写技术结论/不可逆操作前,强制来源
@@ -151,7 +156,8 @@ METHODOLOGY.md / METHODOLOGY.en.md ← full methodology (8 principles + bootstra
   plugin.json                      ← this repo IS a Claude Code plugin
   marketplace.json                 ← for /plugin marketplace add install
 hooks/hooks.json                   ← SessionStart hook (the ONLY automatic mechanism)
-scripts/grounding-inject.sh        ← the hook injects a thin grounding directive → skills below
+scripts/grounding-inject.sh        ← (CC) the hook injects a thin grounding directive → skills
+scripts/governance-init.sh         ← (Codex/any agent) one-command scaffold: AGENTS.md/constitution/pointer
 skills/
   session-grounding/SKILL.md       ← invoke at: session start/resume — 5-step grounding + report first
   truth-first/SKILL.md             ← invoke at: before a technical conclusion / irreversible op — force sources
@@ -163,51 +169,54 @@ LICENSING.md / LICENSE-DOCS / LICENSE-CODE  ← dual-track: docs CC-BY-4.0, code
 
 ---
 
-## 快速开始 / Quick start
+## 快速开始:两条并列路径 / Quick start: two parallel paths
 
-1. 本仓即一个 Claude Code plugin。经 `/plugin marketplace add <owner>/Agent-Coding-Governance-Methodology` 添加后安装(**确切安装命令以当前 Claude Code 官方文档为准**——CC 的 plugin/marketplace 命令可能随版本变化)
-2. 新项目:调用 `governance-bootstrap`,跟着人驱动的 8 步把宪法/根文件/决策日志/快照建起来
-3. 机制说明(**如实**):**只有 SessionStart hook 会自动**——它每次在 session 开始时注入一段薄 grounding 指令;该指令引导你/agent 调用 `session-grounding` skill 走 5 步;写结论/改文档/不可逆操作时按指令调用 `truth-first`。**skill 本身不自动点火,是被 Skill 工具调用的。**
+> 一条命令即可。CC 走插件(运行时自动);Codex / 任意 agent 走一键脚手架,之后 agent 每 session 自动读 `AGENTS.md`。
+> One command either way. CC = plugin (runtime-automatic); Codex / any agent =
+> one-command scaffold, then the agent auto-reads `AGENTS.md` every session.
 
-1. This repo IS a Claude Code plugin. Install it after
-   `/plugin marketplace add <owner>/Agent-Coding-Governance-Methodology` (**the exact
-   install command follows current official Claude Code docs** — CC's plugin/
-   marketplace commands may change by version).
-2. New project: invoke `governance-bootstrap`, follow the human-driven 8 steps to
-   build constitution/root-file/decision-log/snapshot.
-3. Mechanism (**stated honestly**): **only the SessionStart hook is automatic** — it
-   injects a thin grounding directive at each session start; that directive guides
-   you/the agent to invoke the `session-grounding` skill and run the 5 steps; for a
-   conclusion / doc edit / irreversible op, the directive points to `truth-first`.
-   **Skills themselves do not auto-fire — they are invoked by the Skill tool.**
+### 路径 A · Claude Code(插件,运行时自动)/ Path A · Claude Code (plugin, runtime-automatic)
 
----
+```
+/plugin marketplace add johnrucnapier-sketch/Agent-Coding-Governance-Methodology
+```
 
-## 在 Codex / 其它 agent 上用 / Using this with Codex or other agents
+装上后 SessionStart hook 每个 session 自动注入 grounding 指令,引导调用 `session-grounding` / `truth-first` skill。**确切命令以当前 Claude Code 官方文档为准**(CC 的 plugin/marketplace 命令可能随版本变化)。
 
-唯一的自动机制(SessionStart hook 注入 grounding)是 Claude Code 专属的。Codex 等没有 CC 的 hook / Skill / plugin 系统,**不能"装上就自动生效"**。但方法论本身与 `templates/` 是工具无关的——逻辑可迁移,自动化只是 CC 的糖。
+Once installed, the SessionStart hook injects the grounding directive every
+session, guiding the `session-grounding` / `truth-first` skills. **The exact
+command follows current official Claude Code docs** (CC's plugin/marketplace
+commands may change by version).
 
-在 Codex(或任何 agent)上手工复刻:
-1. 用 `templates/CONSTITUTION.skeleton.md` 在仓库里落一份宪法
-2. 把 grounding 五步 + truth-first 规则写进 **`AGENTS.md`**(Codex 的指令文件,等价于 `CLAUDE.md`)或每个 session 的开场白——即手工写死 CC 里 hook 自动注入的那段指令
-3. `templates/` 的 ADR / drift-check / SESSION_START 直接拿用
-4. 代价:失去"每个 session 自动点火"的保证,改由指令遵循执行。**能否自动 ≠ 方法论能否用。**
+### 路径 B · Codex / 任意 agent(一键脚手架)/ Path B · Codex / any agent (one-command scaffold)
 
-The only automatic mechanism (the SessionStart hook injecting grounding) is Claude
-Code-specific. Codex and others have no CC hook / Skill / plugin system, so this
-**does not "just auto-work on install."** But the methodology itself and
-`templates/` are tool-agnostic — the logic is portable; the automation is only CC
-sugar.
+```
+git clone https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology
+sh Agent-Coding-Governance-Methodology/scripts/governance-init.sh /path/to/your-project
+```
 
-To reproduce it by hand on Codex (or any agent):
-1. Drop a constitution into the repo from `templates/CONSTITUTION.skeleton.md`
-2. Put the 5-step grounding + truth-first rules into **`AGENTS.md`** (Codex's
-   instruction file, the equivalent of `CLAUDE.md`) or each session's preamble —
-   i.e., hard-write the directive that the CC hook injects automatically
-3. Use the `templates/` ADR / drift-check / SESSION_START directly
-4. Cost: you lose the "auto-fires every session" guarantee; it runs by
-   instruction-following instead. **"Can it auto-fire" ≠ "can the methodology be
-   used."**
+一条命令把 `CONSTITUTION.md` + `AGENTS.md`(治理指令)+ `CLAUDE.md` 指针铺进你的项目(**幂等、非破坏**,已存在的文件只跳过)。**Codex 原生每 session 自动读 `AGENTS.md`** —— 之后无需再接线。脚本可审阅,故意不用 `curl|sh`。
+
+One command scaffolds `CONSTITUTION.md` + `AGENTS.md` (the governance directive) +
+a `CLAUDE.md` pointer into your project (**idempotent & non-destructive** —
+existing files are skipped). **Codex natively auto-reads `AGENTS.md` every
+session** — no further wiring. The script is reviewable; `curl|sh` is deliberately
+avoided.
+
+### 机制差异(如实)/ How "automatic" differs (stated honestly)
+
+- CC:hook 是**运行时**机制,每 session 真·自动注入;skill 由 Skill 工具调用,不自动点火。
+- Codex / 任意 agent:没有这种 hook;靠 agent 原生自动读 `AGENTS.md`(静态指令)。脚本是**脚手架**,不是给 Codex 造运行时——Codex 没有那东西。**能否运行时 hook ≠ 方法论能否用。**
+- 两条路径都只给"自动 grounding 接线 + 宪法骨架"。完整治理(决策日志/快照/轨道)是**人驱动**的:新项目调用 `governance-bootstrap`(CC)或照 `METHODOLOGY.md §12` 手做。
+
+- CC: the hook is a **runtime** mechanism — genuinely auto-injected every session;
+  skills are invoked by the Skill tool, they do not auto-fire.
+- Codex / any agent: no such hook; relies on the agent natively auto-reading
+  `AGENTS.md` (a static directive). The script is a **scaffolder**, not a Codex
+  runtime — Codex has none. **"Runtime hook or not" ≠ "can the methodology be used."**
+- Either path only wires auto-grounding + a constitution skeleton. Full governance
+  (decision log / snapshots / tracks) is **human-driven**: invoke
+  `governance-bootstrap` (CC) or follow `METHODOLOGY.md §12` by hand.
 
 ---
 
