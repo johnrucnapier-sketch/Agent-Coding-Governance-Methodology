@@ -1,6 +1,6 @@
 {
   "name": "agent-coding-governance-methodology",
-  "owner": { "name": "TODO_OWNER" },
+  "owner": { "name": "johnrucnapier-sketch" },
   "plugins": [
     {
       "name": "agent-coding-governance-methodology",
