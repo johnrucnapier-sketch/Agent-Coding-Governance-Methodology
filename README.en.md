@@ -10,6 +10,33 @@
 
 ---
 
+## Origin — why this exists
+
+> This section is the author's personal voice — edit it freely to your own comfort.
+
+I have perfectionist tendencies, and I have lived with significant anxiety for a long
+time. For years I could no longer do the kind of long-form writing I did as a
+student — the information and thinking in my head far outran the speed at which I
+could put it on paper; my execution could not keep up with my ideas. In real work, I
+always felt boxed in by my own limitations.
+
+The AI / agent era felt like a shackle coming off: the very weaknesses — "thinking
+too much, writing too slowly" — turned into strengths. Wide-ranging ideas could
+combine with an agent and grow into things I could never have produced alone.
+
+Over a long stretch of agent-coding practice, hitting pitfall after pitfall, I
+gradually distilled into this methodology the answer to one question: how do you keep
+an agent consistent — making fewer mistakes, taking fewer wrong turns — across many
+sub-projects, ultra-long timelines, heavy iteration, and changing requirements? On my
+own projects it works well; and because I am risk-averse by nature, this methodology
+also makes the agent more cautious, with fewer destructive actions.
+
+I am open-sourcing it so that people doing long-horizon development with Claude Code
+or Codex don't have to fall into the same pits I did. The principles are the
+skeleton — take them and grow your own project's flesh on them.
+
+---
+
 ## What this is / why you need it
 
 Doing **multi-session, long-horizon, possibly multi-person / multi-branch**
@@ -133,6 +160,10 @@ governance file as a cautionary case is ten times more useful than an abstract r
   the prose of each `SKILL.md`) under **CC-BY-4.0**; the code/mechanical parts
   (`scripts/`, `hooks/`, `templates/`, `.claude-plugin/`) under **MIT**. See
   `LICENSING.md`.
+- Cost (untested, the author's judgment): it likely consumes *more* tokens (more
+  reading code / verifying / restating / stopping to confirm), but buys fewer errors
+  and fewer wrong turns, compressing the most expensive part — rework. The author is
+  not token-constrained and has not measured it; assess it on your own project.
 - Maintenance: a methodology share — issues/PRs welcome, but **self-adaptation is the
   norm; no heavy support promised.**
 

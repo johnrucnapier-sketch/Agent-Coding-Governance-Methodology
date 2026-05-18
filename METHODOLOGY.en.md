@@ -409,6 +409,11 @@ directly, no discussion.
   real long-horizon project, with all of that project's business specificity stripped.
 - It is not theory, it is sediment from mistakes — including the meta-level crash of
   "violating governance while building the governance system".
+- **On cost (untested, the author's judgment)**: this discipline likely consumes
+  *more* tokens per task — more reading code, verifying, restating, stopping to
+  confirm — but it buys fewer errors and fewer wrong turns, compressing the most
+  expensive part: rework. The author is not token-constrained and has not measured
+  it; assess the actual delta on your own project.
 - Your project's specificity differs; **when instantiating, redesign the tracks and
   contracts, do not copy the concrete lists.**
 - This file itself should also be governed by its own rules: it is methodology (the
