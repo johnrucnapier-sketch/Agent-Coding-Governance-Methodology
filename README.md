@@ -183,6 +183,34 @@ LICENSING.md / LICENSE-DOCS / LICENSE-CODE  ← dual-track: docs CC-BY-4.0, code
 
 ---
 
+## 在 Codex / 其它 agent 上用 / Using this with Codex or other agents
+
+唯一的自动机制(SessionStart hook 注入 grounding)是 Claude Code 专属的。Codex 等没有 CC 的 hook / Skill / plugin 系统,**不能"装上就自动生效"**。但方法论本身与 `templates/` 是工具无关的——逻辑可迁移,自动化只是 CC 的糖。
+
+在 Codex(或任何 agent)上手工复刻:
+1. 用 `templates/CONSTITUTION.skeleton.md` 在仓库里落一份宪法
+2. 把 grounding 五步 + truth-first 规则写进 **`AGENTS.md`**(Codex 的指令文件,等价于 `CLAUDE.md`)或每个 session 的开场白——即手工写死 CC 里 hook 自动注入的那段指令
+3. `templates/` 的 ADR / drift-check / SESSION_START 直接拿用
+4. 代价:失去"每个 session 自动点火"的保证,改由指令遵循执行。**能否自动 ≠ 方法论能否用。**
+
+The only automatic mechanism (the SessionStart hook injecting grounding) is Claude
+Code-specific. Codex and others have no CC hook / Skill / plugin system, so this
+**does not "just auto-work on install."** But the methodology itself and
+`templates/` are tool-agnostic — the logic is portable; the automation is only CC
+sugar.
+
+To reproduce it by hand on Codex (or any agent):
+1. Drop a constitution into the repo from `templates/CONSTITUTION.skeleton.md`
+2. Put the 5-step grounding + truth-first rules into **`AGENTS.md`** (Codex's
+   instruction file, the equivalent of `CLAUDE.md`) or each session's preamble —
+   i.e., hard-write the directive that the CC hook injects automatically
+3. Use the `templates/` ADR / drift-check / SESSION_START directly
+4. Cost: you lose the "auto-fires every session" guarantee; it runs by
+   instruction-following instead. **"Can it auto-fire" ≠ "can the methodology be
+   used."**
+
+---
+
 ## ⚠️ 适配指南:直接拿用 vs 必须按你项目改 / Adaptation guide: take as-is vs. must adapt to your project
 
 **直接拿用(通用骨架)**:四类漂移分类 / 八原则 / 分层结构 / bootstrap 配方 / 自检红线。
