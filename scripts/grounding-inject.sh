@@ -1,7 +1,7 @@
 #!/bin/sh
 # SessionStart grounding injector — part of agent-coding-governance-methodology.
-# Only hooks auto-fire in Claude Code; this injects a THIN directive that points
-# at the skills. It does not duplicate skill bodies (methodology principle §4).
+# Only hooks auto-fire in Claude Code; this injects a thin directive that points
+# at the skills rather than duplicating their content.
 set -eu
 
 DIR="$(pwd)"

@@ -103,7 +103,6 @@ skills/
 templates/                        ← fully blank generic skeletons, zero business
   CONSTITUTION.skeleton.md  ADR._TEMPLATE.md  SESSION_START.skeleton.md  drift-check.stub.js
 LICENSING.md / LICENSE-DOCS / LICENSE-CODE  ← dual-track: docs CC-BY-4.0, code MIT
-PUBLISHING.md                     ← beginner-grade publishing runbook
 ```
 
 ---
@@ -120,9 +119,7 @@ PUBLISHING.md                     ← beginner-grade publishing runbook
    injects a thin grounding directive at each session start; that directive guides
    you/the agent to invoke the `session-grounding` skill and run the 5 steps; for a
    conclusion / doc edit / irreversible op, the directive points to `truth-first`.
-   **Skills themselves do not auto-fire — they are invoked by the Skill tool.** (This
-   is the methodology's own Principle 5, truth-first, applied to this repo itself: do
-   not overclaim automation.)
+   **Skills themselves do not auto-fire — they are invoked by the Skill tool.**
 
 ---
 

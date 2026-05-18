@@ -75,7 +75,6 @@ skills/
 templates/                        ← 全空白通用骨架，零业务
   CONSTITUTION.skeleton.md  ADR._TEMPLATE.md  SESSION_START.skeleton.md  drift-check.stub.js
 LICENSING.md / LICENSE-DOCS / LICENSE-CODE  ← 双轨：文档 CC-BY-4.0，代码 MIT
-PUBLISHING.md                     ← 新手级发布 runbook
 ```
 
 ---
@@ -84,7 +83,7 @@ PUBLISHING.md                     ← 新手级发布 runbook
 
 1. 本仓即一个 Claude Code plugin。经 `/plugin marketplace add <owner>/Agent-Coding-Governance-Methodology` 添加后安装(**确切安装命令以当前 Claude Code 官方文档为准**——CC 的 plugin/marketplace 命令可能随版本变化)
 2. 新项目：调用 `governance-bootstrap`，跟着人驱动的 8 步把宪法/根文件/决策日志/快照建起来
-3. 机制说明(**如实**):**只有 SessionStart hook 会自动**——它每次在 session 开始时注入一段薄 grounding 指令;该指令引导你/agent 调用 `session-grounding` skill 走 5 步;写结论/改文档/不可逆操作时按指令调用 `truth-first`。**skill 本身不自动点火,是被 Skill 工具调用的**(这正是方法论 §5 真值优先对本仓自身的应用——不夸大自动化)
+3. 机制说明(**如实**):**只有 SessionStart hook 会自动**——它每次在 session 开始时注入一段薄 grounding 指令;该指令引导你/agent 调用 `session-grounding` skill 走 5 步;写结论/改文档/不可逆操作时按指令调用 `truth-first`。**skill 本身不自动点火,是被 Skill 工具调用的。**
 
 ---
 

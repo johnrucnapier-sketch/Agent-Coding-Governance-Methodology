@@ -7,7 +7,7 @@
  * It does NOT verify the cited line actually says what the doc claims — that is
  * project-specific. Implement the real drift checks for YOUR project here.
  *
- * Build this alongside your docs, not after (methodology principle §4 / step 4).
+ * Build this alongside your docs, not after.
  *
  * Usage: node drift-check.stub.js <doc-file>
  * Exit:  0 = all citations resolvable, 1 = drift found, 2 = bad usage.
