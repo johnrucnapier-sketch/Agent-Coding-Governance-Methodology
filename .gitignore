@@ -1,0 +1,9 @@
+# 内部构建脚手架 — 永不进公开包(方法论 §④ 范围边界自我应用)
+# Internal build scaffolding — never ships in the public package (§④ scope boundary, self-applied)
+docs/superpowers/
+.DS_Store
+
+# BUILD_BRIEF.md 是上个 session 写的构建 spec,且含业务项目名引用(§④),不进公开包。
+# BUILD_BRIEF.md is the prior session's build spec and references a business project
+# name (§④ scope boundary) — excluded from the public package.
+BUILD_BRIEF.md
