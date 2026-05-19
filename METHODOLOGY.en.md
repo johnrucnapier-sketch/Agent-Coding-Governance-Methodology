@@ -156,7 +156,7 @@ source → delete it or add the source.
 This one must be made **absolute**, it cannot be softened. The instant you leave a
 "usually the case" loophole, drift crawls in through it.
 
-### 5.1 Corollary: summaries are never code-truth
+### Principle Three · corollary: summaries are never code-truth
 
 Historical decision records, the live-handoff layer, and memory indices (see
 Principle One) are allowed — they record *when which decision was made*; that is the
@@ -247,8 +247,9 @@ Per your project's reality, split work into several **tracks**. Each track:
 Physical isolation means (as needed, light to heavy):
 - one sub-dir rules file per track (thin pointer + that dir's specific rules);
   entering a dir auto-lands you on that track
-- only go to worktrees when concurrency is truly high (parallel dirs that don't step
-  on each other)
+- a worktree is not a "only when concurrency is high" option — it is the enforcement
+  mechanism of Principle Seven "one trunk, never rotting" (see "Principle Seven ·
+  corollary"); **single-user parallelism requires it just as much**
 - worktrees coordinate via contract files, not verbal handoff
 
 ---
@@ -271,6 +272,46 @@ Physical isolation means (as needed, light to heavy):
 > system, the first time, is often built on a feature branch — because the moment you
 > start building governance, you happen to be doing some feature. Move it home to the
 > trunk as early as possible.
+
+### Principle Seven · corollary: Worktree discipline — making "one trunk, never rotting" actually enforceable
+
+Principle Seven says "govern only on the trunk, the trunk never rots," but **does not
+say by what physical guarantee**. The answer is worktree discipline.
+
+The key, counter-intuitive realization: **"which branch you are on" is a property of
+the worktree (that directory), not of the session/agent.** So — even solo, with no
+concurrency — if two lines share one working directory (`checkout` back and forth, or
+two agent sessions pointing at the same dir), switching a branch swaps the files out
+from under the other line, and governance docs "magically" land on the wrong branch.
+This is not a high-concurrency problem; **single-user parallelism triggers it.**
+
+The discipline:
+- **One long-lived line = one dedicated worktree directory, pinned to its branch**;
+  no switching to other branches inside it.
+- **The main worktree is always the trunk** — the sole author home of
+  governance/general truth (Principle Seven) and the version-convergence/tag point;
+  **never check out another branch in the main tree.**
+- Platform lines and feature lines each get their own worktree; a new line forks a
+  branch from the trunk + a new worktree.
+- **Convergence only via the trunk**: mature features merge back to the trunk; each
+  line periodically merges the trunk to receive governance and feature updates;
+  **no direct line-to-line merge** (the topology is a star around the trunk, not a mesh).
+- **Infrastructure not in git (deploy / external services / environment) is not
+  versioned by branch** — it is recorded on the trunk as ADRs + snapshots. A
+  "feature" is often two halves: the code half (in git, in a feature worktree) and
+  the infra half (outside git, recorded in trunk governance docs); never conflate them.
+- Session-start grounding must confirm: you are in the right worktree, on the right
+  branch; **if the main tree is not on the trunk = anomaly, stop and report**
+  (extending Principle Seven's "stop if on a rotten trunk" to the worktree-placement
+  layer).
+
+Physical isolation + trunk convergence maps onto the real rhythm of multi-line
+development: several lines run in parallel long-term, converge through the trunk at
+version points, then parallelize and converge again, repeatedly.
+
+> Worktree discipline is the operational implementation of Principle Seven, not a
+> replacement — Principle Seven governs "where governance lives," this corollary
+> governs "by what physical means it actually stays there."
 
 ---
 

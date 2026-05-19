@@ -34,5 +34,15 @@
 ## 6. 修宪流程 / Amendment process
 - <推翻或新增条款的流程:谁提案、谁批准、如何记录>
 
+## 7. 工作树纪律 / Worktree discipline
+- 一线一工作树、钉死分支;主树永远=主干=治理 author + 汇聚点,严禁在主树切别分支 /
+  one line = one worktree pinned to its branch; the main tree is always trunk =
+  governance author + convergence point; never switch branches in it
+- 汇聚只经主干,禁线间直接 merge;git 外基建在主干以 ADR/快照记录 /
+  converge only via the trunk, no direct line-to-line merge; non-git infra recorded
+  on the trunk as ADR/snapshots
+- session 启动验证所在工作树/分支;主树非主干即停 / session-start verifies the
+  worktree/branch; if the main tree is not the trunk, stop
+
 ## 修订记录 / Revision log
 - <YYYY-MM-DD> 初版,触发案例:<…>

@@ -16,7 +16,7 @@ promised.**
     or project-specific specifics, will be declined.
   - **Truth-first (§5):** doc/claim changes must be accurate and sourced; no
     "should be / usually / I recall" hand-waving; do not over-promise mechanism
-    behavior. A summary is never code-truth (§5.1).
+    behavior. A summary is never code-truth (Principle Three · corollary).
   - **Honest onboarding:** never describe a smoother install than reality; keep the
     "you'll know it worked when…" signals truthful.
 - **Bilingual docs convention:** user-facing docs are a single file, **English first
@@ -69,7 +69,7 @@ under **CC-BY-4.0**, code / mechanical parts under **MIT** (see `LICENSING.md`).
   - **范围边界(§④):** 本仓零业务——只放通用空骨架。任何加入具体项目业务 /
     战略 / 经营内容或项目特定细节的 PR,会被婉拒。
   - **真值优先(§5):** 改文档/结论必须准确、带来源;不"应该是 / 通常 / 我记得"
-    含糊;不夸大机制行为。摘要永不作为代码真值(§5.1)。
+    含糊;不夸大机制行为。摘要永不作为代码真值(第三原则·推论)。
   - **诚实上手:** 绝不把安装写得比现实更顺;"成功的样子"信号要属实。
 - **双语文档约定:** 面向用户的文档是单文件、**英文完整在前,中文完整在后**——
   不逐段交错;两边保持同步。(`METHODOLOGY.md` / `METHODOLOGY.en.md` 是历史遗留
