@@ -1,16 +1,17 @@
 #!/bin/sh
-# governance-init.sh — one-command scaffolder for agent-coding-governance-methodology.
+# governance-init.sh — plugin-free scaffolder for agent-coding-governance-methodology.
 #
 # What this is (honest, per the methodology's own truth-first principle):
 #   This is a SCAFFOLDER, not a runtime. It writes governance files into a target
 #   project so the discipline is in place from session one.
 #     - Claude Code: prefer the plugin (`/plugin marketplace add ...`); its
-#       SessionStart hook injects grounding automatically at runtime.
-#     - Codex / any other agent: there is no such runtime hook. Instead Codex
-#       natively auto-reads `AGENTS.md` every session — so this script writes
-#       `AGENTS.md` with the same grounding/truth-first directive. That is the
-#       honest equivalent: deploy once, the agent auto-applies it thereafter.
-#   This script gives you the auto-grounding wiring + a blank constitution. The
+#       SessionStart hook injects grounding automatically at runtime. You do not
+#       need this script.
+#     - No plugin / other setups: this writes CONSTITUTION.md + AGENTS.md (a
+#       generic agent-governance directive) + a CLAUDE.md pointer as STATIC files.
+#       Whether the directive is auto-applied depends on whether your agent reads
+#       an agents-file by convention; this is a static scaffold, not a runtime.
+#   This script gives you the grounding directive + a blank constitution. The
 #   FULL governance setup (decision log, snapshots, tracks) is deliberately
 #   human-driven — run the `governance-bootstrap` skill / METHODOLOGY §12 for that.
 #
@@ -62,8 +63,8 @@ else
   note_make "CONSTITUTION.md  (fill every <...> — humans only / 仅人可改)"
 fi
 
-# 2. AGENTS.md — Codex / any-agent auto-read directive (the static equivalent of
-#    the Claude Code SessionStart hook injection).
+# 2. AGENTS.md — generic agent-governance directive (a static file; an agent that
+#    honors an agents-file convention will read it).
 if [ -f "$TARGET/AGENTS.md" ]; then
   note_skip "AGENTS.md  (exists — merge the block below by hand / 已存在,请手动并入)"
 else
@@ -71,10 +72,10 @@ else
 # Agent governance / agent 治理约束
 
 This project uses agent-coding-governance. The rules below are non-negotiable and
-apply to every session (this file is auto-read by Codex and similar agents).
+apply to every session. Read and follow them before doing anything.
 
-本项目启用 agent-coding-governance。以下规则不可妥协,适用于每个 session
-(Codex 等 agent 会自动读取本文件)。
+本项目启用 agent-coding-governance。以下规则不可妥协,适用于每个 session。
+动手前先读并遵守。
 
 ## Before acting / 动手前:grounding(5 steps / 五步)
 
@@ -96,21 +97,26 @@ apply to every session (this file is auto-read by Codex and similar agents).
 - Every claim carries `file:line` from grep/reading code. No "I think / usually /
   I recall". If you cannot read a truth source, say so — never guess. /
   每条结论带 grep/读码得到的 `文件:行号`。禁"我觉得/通常/我记得"。读不到真值就直说,不许编。
+- A summary is never code-truth: never inherit a code fact from a summary,
+  handoff, or memory layer — read it from the code now. /
+  摘要永不作为代码真值:不从摘要/交接/记忆层继承代码事实——当下从代码读。
 - Before destructive ops: list what is affected + write a rollback + quote the
   human's authorization verbatim. /
   破坏性操作前:列影响面 + 写回滚 + 原文引用人的授权。
 
 ## Scope / 范围
 
-Only content needed for the software to be built / shipped / run belongs here.
-Business / strategy / non-software planning is OUT. /
-只有"为软件能开发/上线/运行"的内容属于这里。经营/战略/与软件无关的规划 = OUT。
+Default rule: only content needed for the software to be built / shipped / run
+belongs here; business / strategy / non-software planning is OUT. This criterion
+is a default — redefine it for your project if needed, but keep it explicit. /
+默认判据:只有"为软件能开发/上线/运行"的内容属于这里;经营/战略/与软件无关的
+规划 = OUT。此判据是默认值——需要可按项目重定义,但必须显式。
 
 > Full methodology: see the agent-coding-governance-methodology repo
 > (METHODOLOGY.md). Full setup is human-driven (governance-bootstrap / §12). /
 > 完整方法论见 agent-coding-governance-methodology 仓库;完整搭建是人驱动的。
 EOF
-  note_make "AGENTS.md  (Codex / any-agent auto-read directive)"
+  note_make "AGENTS.md  (generic agent-governance directive)"
 fi
 
 # 3. CLAUDE.md — thin pointer (Principle 2: meta + pointers, never facts).
@@ -144,10 +150,11 @@ echo "Done / 完成: created $CREATED, skipped $SKIPPED."
 echo
 echo "Next / 接下来:"
 echo "  1. Fill CONSTITUTION.md — every <...>. Humans only. / 填宪法,仅人可改。"
-echo "  2. Claude Code: install the plugin for runtime auto-grounding. /"
-echo "     Claude Code:装插件以获得运行时自动 grounding。"
-echo "  3. Codex / others: AGENTS.md is auto-read each session — nothing else"
-echo "     to wire. / Codex 等:AGENTS.md 每 session 自动读,无需再接线。"
+echo "  2. Claude Code users: install the plugin for runtime auto-grounding. /"
+echo "     Claude Code 用户:装插件以获得运行时自动 grounding。"
+echo "  3. No plugin: point your agent at AGENTS.md (agents that honor an"
+echo "     agents-file will read it automatically). / 不用插件:让你的 agent"
+echo "     读 AGENTS.md(按约定读 agents 文件的 agent 会自动读)。"
 echo "  4. Full governance (decision log, snapshots, tracks) is human-driven —"
 echo "     run governance-bootstrap / METHODOLOGY §12. /"
 echo "     完整治理(决策日志/快照/轨道)是人驱动的——走 governance-bootstrap / §12。"

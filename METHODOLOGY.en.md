@@ -156,6 +156,20 @@ source → delete it or add the source.
 This one must be made **absolute**, it cannot be softened. The instant you leave a
 "usually the case" loophole, drift crawls in through it.
 
+### 5.1 Corollary: summaries are never code-truth
+
+Historical decision records, the live-handoff layer, and memory indices (see
+Principle One) are allowed — they record *when which decision was made*; that is the
+history layer.
+
+But any summary, cross-session auto-compression, or vector-retrieval result **can
+never be the source of a current code fact**. Any conclusion about code facts must be
+read directly from the code, now — never inherited from a summary.
+
+This is the direct corollary of truth-first in the "memory" dimension: a summary is
+the natural feeding mechanism of drift ② (cognitive) — usable as a history record,
+not as a truth source.
+
 ---
 
 ## 6. Principle Four: the session-start grounding ritual (verify before you act)
@@ -275,6 +289,13 @@ Be explicit about what content belongs in this development repo.
 - The AI does not proactively produce, in the dev repo, content that doesn't belong here.
 - Boundary in doubt → apply the criterion; still unclear → stop and ask, **do not
   unilaterally widen a deletion**.
+
+> **About the criterion itself (for adopters):** "software IN / everything else OUT"
+> is this methodology's **default stance**, and the line that keeps this very repo
+> clean. But the scope boundary is inherently project-specific — if your project
+> needs a different IN/OUT criterion, this rule is one you are meant to rewrite for
+> your own case (see §14: the scope boundary is an "instantiate per your project"
+> item). Rewriting it is not drift; having **no explicit boundary** is.
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "name": "agent-coding-governance-methodology",
   "version": "0.1.0",
-  "description": "Governance for long-horizon AI/agent coding (Claude Code/Codex): make structural rot visible, interceptable, reversible. 让多会话/长周期 agent 开发的结构性腐化显性化、可拦截、可回滚。",
+  "description": "Governance for long-horizon Claude Code development: make the four structural-drift types visible, interceptable, reversible. 长周期 Claude Code 开发的四类结构性漂移:显性化、可拦截、可回滚。",
   "author": { "name": "johnrucnapier-sketch" },
   "homepage": "https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology",
   "repository": "https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology",
