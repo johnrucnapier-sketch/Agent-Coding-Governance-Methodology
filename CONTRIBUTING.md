@@ -29,6 +29,35 @@ generic skeletons, honest corrections to claims, bug fixes in `scripts/`.
 **Out of scope:** anything tying the repo to a specific product / company / private
 context; "do my project's governance for me"; large framework-style additions.
 
+## Evidence requirements for new normative content (the 2-independent-evidence rule)
+
+New normative content (principles, corollaries, Meta-observations, hook
+mechanisms) must be supported by **at least two independent supporting events** to
+enter the main clause list. Evidence may be:
+
+- **Observed events:** the same failure mode occurring in different sessions,
+  different tasks, different times — transcript / log indexable.
+- **Reasoned predictions:** failure forms inferable from known agent / tool
+  behavior patterns — the reasoning must be stated.
+
+**Clauses supported by only one observed event:** label them as **"advisory
+clause · single direct event of support, pending second-evidence confirmation"** at
+the top of the clause body; grace period **≤ 30 days**. If a second independent
+event is not produced in that window, downgrade the clause to Meta-observations or
+remove it.
+
+**Predictive content with no observed event:** does not enter main clauses; goes
+to the Meta-observations chapter as "predicted but not observed". Re-evaluate per
+the 2-independent-evidence rule upon the first observation.
+
+**This rule's purpose:** prevent the methodology from being shaped 1:1 by any
+single incident. Incident-shaped content is a code smell; principle-shaped content
+generalizes. Strong observed-event support is the only way through.
+
+> This rule applies to ACGM itself: any future change to METHODOLOGY (new
+> corollaries, Meta-observations, mechanism additions) must declare its evidence
+> status under this rule explicitly. Past clauses are grandfathered.
+
 ## Contributing a drift case (zero-code path)
 
 If the methodology caught a real drift in your work, a PR adding it to `CASES.md`
@@ -80,6 +109,27 @@ under **CC-BY-4.0**, code / mechanical parts under **MIT** (see `LICENSING.md`).
 
 **不在范围:** 把仓库绑到具体产品 / 公司 / 私有上下文;"替我做我项目的治理";
 庞大的框架式新增。
+
+## 新规范内容的证据要求(2-独立证据规则)
+
+新规范内容(原则、推论、元观察、hook 机制)必须有**至少 2 个独立支撑事件**才能进入
+主条款列表。证据可以是:
+
+- **已观察事件:** 不同 session、不同任务、不同时间发生的同类失效——transcript / 日志可指。
+- **合理预测事件:** 基于已知 agent / 工具行为模式可推断的失效形态——**推断依据必须明文**。
+
+**只有 1 个已观察事件支撑的条款:** 在条款正文顶部标注 **"建议性条款 · 单次直接事件
+支撑,待第二独立证据确认"**;**过渡期 ≤ 30 天**。若该窗口内未补到第二独立证据,降级
+到元观察章节,或删除。
+
+**无任何观察事件的预测性内容:** 不入主条款,进元观察章节作为"预测但未观察"。一旦
+观察到首例,按 2-独立证据规则重新评估。
+
+**本规则的目的:** 防止方法论被任一次事故 1:1 塑形。事故反推式(incident-shaped)
+的条款是代码气味;原理推演式(principle-shaped)才能泛化。强观察证据支撑是唯一通路。
+
+> 本规则适用于 ACGM 自身:METHODOLOGY 未来任何改动(新推论、元观察、机制新增)必须
+> 在条款里明文声明本规则下的证据状态。历史条款 grandfathered(不溯及既往)。
 
 ## 贡献漂移案例(零代码门槛)
 

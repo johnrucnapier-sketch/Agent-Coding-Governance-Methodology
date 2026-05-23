@@ -22,6 +22,37 @@ no working from impression, no detouring, no overstepping, no letting the trunk 
 
 ---
 
+## Stance: a three-layer structure — Normative · Mechanism · Audit
+
+ACGM is a **normative methodology**. It defines what agent behavior *should be*; it
+does not prescribe who detects a violation.
+
+Beneath it sit three independent execution layers, complementary rather than
+substitutive:
+
+| Layer | Carries | Example |
+|---|---|---|
+| **Normative (ACGM proper)** | Declares the should | "Before any destructive op, report the real current state" |
+| **Mechanism** (hooks / drift-check) | The mechanically enforceable subset | PreToolUse forces a structured gate; drift-check static scan |
+| **Audit** (humans / agent self-check / external agents / future agents reviewing the record) | Closes gaps the mechanism cannot cover | A human noticing that a long-running task has crashed hours later |
+
+ACGM **does not assume any specific auditor.** It only commits to making violations
+**visible, traceable, and recorded**. The mechanism layer is partial implementation;
+the audit layer closes the gap. Both are execution means and do not move the norm.
+
+> **Audit reliability gradient (empirical):** human / external agent / future agent
+> are substantially more reliable than **the acting agent's self-check**.
+> Self-check should not be relied on as the primary audit source — this is observed
+> repeatedly: an agent's ability to detect its own drift is systematically lower
+> than an external viewpoint's.
+
+This stance determines ACGM's growth direction: not designed to compensate for
+"the human being absent", nor assuming "the human is always present"; concerned
+only with **reducing the agent's own mechanism-induced drift**, and making any
+auditor (including humans) more effective.
+
+---
+
 ## 1. Why multi-session AI development rots (know the enemy first)
 
 A single session has limited context. Once a project runs long, you keep opening new
@@ -170,6 +201,69 @@ This is the direct corollary of truth-first in the "memory" dimension: a summary
 the natural feeding mechanism of drift ② (cognitive) — usable as a history record,
 not as a truth source.
 
+**Operationalization A — re-verify after compaction / session resume.** If this
+session is a resume or has been compacted, before doing anything, **every reference
+inherited from the summary must be re-verified at the source right now** — unit
+names via `systemctl list-units`, file paths via `ls`, version numbers via
+`config.json`, service IDs via running-state read, **every single one with a
+source**, no matter how familiar it reads. Familiar ≠ truth.
+
+**Operationalization B — the real compliance criterion for any ACGM ritual.**
+Any ACGM ritual (grounding report / fact statement / 5-step declaration) is judged
+compliant based on **whether each concrete technical fact inside the ritual was
+sourced at the moment**, not on whether the ritual's *form* is complete.
+"Form compliance" ≠ "substance compliance"; only when every fact has, within the
+same conversational block in this session, a corresponding tool call (grep / cat /
+systemctl list-units / ls etc.) preceding it, and that tool call's output
+**contains the referenced fact**, is it substance-compliant.
+
+### Principle Three · corollary: operational truth (identifiers in commands share the same evidence standard)
+
+> **Advisory clause · single direct event of support** — per CONTRIBUTING's
+> 2-independent-evidence rule, grace period ≤ 30 days; promoted to main clause
+> after a second independent event, or downgraded to Meta-observations otherwise.
+
+Writing "uses X" in a doc requires `file:line`; writing `systemctl stop X` in a
+command has had no comparable constraint. This is truth-first's blind spot on the
+**operational plane**.
+
+Identifiers in commands (unit names, file paths, service IDs, PIDs, containers,
+hosts) and references in docs share the **same evidence standard**. Before any
+destructive / state-changing operation, every identifier in the command must have
+a **right-now-pointable source** — pointing to a specific line N of a
+`systemctl list-units` output in this session, an `ls` listing, or a `cat config`
+field — **no reuse of session-internal aliases or impressions**.
+
+> **Failure mode:** the agent treats a one-off alias (e.g., "the 27B", "the main
+> model", "the cache dir") established in some prior turn as the canonical
+> identifier and issues a command on that basis. The real identifier is 10 seconds
+> away via `list-units`, but not querying it = ② on the operational plane.
+
+### Principle Three · corollary: async / post-action self-monitoring (the starter owns the verification)
+
+> **Advisory clause · single direct event of support** — same 2-independent-evidence rule.
+
+Truth-first cares about the source of a *conclusion*; grounding cares about the
+*state* before action; **neither speaks to what happens after**.
+
+Any **background process / long-running task / state-changing operation** you
+start, **its completion or failure verification is owned by you**, until that
+state is explicitly verified.
+
+- "Started" ≠ "running": after `systemctl start X`, check `is-active` + resource
+  use — **not just exit code**.
+- "Exit 0" ≠ "intent achieved": after a destructive op, check whether the right
+  target was hit and the intended effect occurred.
+- Background tasks must register: **when to check back, and with what command for
+  liveness / progress**; if it involves an auto-restart loop, explicitly declare
+  the monitoring interval.
+
+**Three-layer placement:** this is a normative-layer clause. The mechanism layer
+(PreToolUse hook) can do "promise on record" — the agent declares at the moment
+"I will run X to verify after execution"; **whether the agent actually goes back
+hours later is closed by the audit layer.** This shape — "mechanism partially
+covers, the norm fully declares" — is the model case of the Stance section.
+
 ---
 
 ## 6. Principle Four: the session-start grounding ritual (verify before you act)
@@ -195,6 +289,34 @@ more than half of handoff cost.**
 
 > Key: **restate first, then act.** The deviation exposed at the restate stage is an
 > order of magnitude cheaper than the one found after the code is written.
+
+### Principle Four · corollary: grounding required before any destructive operation
+
+> **Advisory clause · single direct event of support** — same 2-independent-evidence rule.
+
+The 5-step grounding ritual is not just for session start; **before every
+destructive / state-changing operation** it must also run, at minimum steps 1–3 of
+the five:
+
+1. **Read the relevant governance rules:** the red lines for this class of
+   operation (e.g., truth-first's operational-truth corollary, this repo's scope
+   boundary).
+2. **Identify worktree / branch / track:** the worktree and current branch this
+   operation is on (per **Principle Seven · corollary: worktree discipline**),
+   which track it lies in, what scope it affects. **If on the main worktree and
+   not on the trunk = Principle Seven · corollary anomaly; stop immediately, this
+   destructive operation must not run.**
+3. **Report the real current state:** `is-active` / GPU usage / existing processes
+   / file mtimes — **read them, do not work from impression**.
+
+"Destructive / state-changing" includes but is not limited to:
+`systemctl stop/start/disable/restart`, `rm -rf`, `git push --force` /
+`git reset --hard`, `drop/truncate/delete from`, `dd`, `mkfs`, `kill -9`,
+model load/unload, service start/stop.
+
+> Connection with §Principle Seven · corollary: worktree discipline says "the main
+> tree is always the trunk"; this corollary makes that claim re-verified **before
+> every destructive operation**, not just once at session start.
 
 ---
 
@@ -337,6 +459,66 @@ Be explicit about what content belongs in this development repo.
 > needs a different IN/OUT criterion, this rule is one you are meant to rewrite for
 > your own case (see §14: the scope boundary is an "instantiate per your project"
 > item). Rewriting it is not drift; having **no explicit boundary** is.
+
+---
+
+## Meta-observations
+
+The four drift types (①②③④) answer "**what** failed" — a failure-form
+classification. The Meta-observations below answer "**how** failure happens" and
+"**why** governance fails over time" — **orthogonal** to the failure classification,
+belonging to the methodology's own cognitive and design observations. They are not
+extensions of the drift taxonomy, hence a separate chapter.
+
+This chapter grows over time — new methodology-level observations get added here.
+
+### Meta-observation 1: performative compliance
+
+An agent can produce **the appearance of compliance** without **the substance of
+compliance** — posting a complete grounding report / fact statement / ritual
+declaration whose concrete technical facts were not sourced at the moment but
+inherited from a summary or impression. This is a matured specialization of ②;
+it warrants separate vigilance.
+
+Compliance judgment must be based on **whether each fact in the ritual was sourced
+at the moment**, not on whether the ritual's form is complete (see Principle
+Three · corollary: summaries-not-truth · Operationalization B).
+
+**Detection criterion (mechanically checkable):** for every concrete fact (number,
+unit name, version, status) referenced in a fact statement / grounding report,
+there must be, **within the same conversational block in this session**, a
+corresponding tool call (grep / cat / systemctl list-units / ls etc.) preceding
+it, whose output **contains the referenced fact**. Otherwise, even with a
+`file:line` field present, it remains form-compliance.
+
+**Current evidence status:** predicted. **The strong form of fakery (claiming to
+have run grep when none was run) has not been observed.** The weak form already
+seen (summary inheritance without re-verification) is covered by
+summaries-not-truth. Once a strong form is observed, by the 2-independent-evidence
+rule it is promoted to an independent §3 corollary.
+
+### Meta-observation 2: injection saturation
+
+The more frequently hooks / SessionStart text / PreToolUse prompts inject content,
+the faster an agent learns **semantic ignorance** — mechanism design must be
+restrained, hitting precisely rather than blanketing. This is a sustainability
+constraint on ACGM itself.
+
+**Design consequences:**
+
+- Every new hook's introduction must have explicit failure evidence behind it;
+  **no "just in case" additions**.
+- The same reminder must not be redundantly triggered across different hooks
+  (SessionStart and PreToolUse must not say the same thing).
+- **Whitelist hooks are preferred over blanket hooks** (PreToolUse only on
+  destructive Bash, not on all Bash).
+- An intra-session trigger frequency above ~5 for the same hook = design smell,
+  needs review.
+
+**Current evidence status:** design-prevention principle. **A specific saturation
+event has not been observed.** This methodology's own hook design is already
+constrained by it (PreToolUse only matches destructive Bash; SessionStart only
+fires at session start / resume).
 
 ---
 
