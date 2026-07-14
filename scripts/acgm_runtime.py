@@ -127,15 +127,21 @@ def utc_now() -> str:
 
 
 def json_print(value: Any) -> None:
-    print(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+    # Hook stdout is a JSON wire protocol, not terminal prose.  ASCII escapes
+    # keep it decodable even when Windows Python inherits a legacy code page
+    # while preserving the exact Unicode value after JSON decoding.
+    print(json.dumps(value, ensure_ascii=True, separators=(",", ":")))
 
 
 def read_hook_input() -> dict[str, Any]:
     try:
-        raw = sys.stdin.read()
+        # Claude/Git Bash send hook JSON as UTF-8.  Reading ``sys.stdin``
+        # directly on Windows can apply the active ANSI code page instead.
+        buffer = getattr(sys.stdin, "buffer", None)
+        raw = buffer.read().decode("utf-8") if buffer is not None else sys.stdin.read()
         value = json.loads(raw) if raw.strip() else {}
         return value if isinstance(value, dict) else {}
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return {}
 
 
@@ -144,14 +150,18 @@ def run_git(root: Path, *args: str) -> str:
         result = subprocess.run(
             ["git", "-C", str(root), *args],
             check=False,
-            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             timeout=3,
         )
     except (OSError, subprocess.TimeoutExpired):
         return ""
-    return result.stdout.strip() if result.returncode == 0 else ""
+    if result.returncode != 0:
+        return ""
+    try:
+        return result.stdout.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return ""
 
 
 def resolve_project_root(data: dict[str, Any] | None = None, explicit: str | None = None) -> Path:
@@ -1802,7 +1812,8 @@ def create_file_exclusive(path: Path, content: bytes) -> bool:
     """Create one scaffold file atomically; never follow or replace a path."""
 
     try:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        descriptor = os.open(path, flags, 0o644)
     except FileExistsError:
         return False
     complete = False

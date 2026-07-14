@@ -57,6 +57,10 @@ class RuntimeTestCase(unittest.TestCase):
             os.environ.pop(key, None)
         for key in ("CLAUDE_CODE_GIT_BASH_PATH", "CLAUDE_CODE_USE_POWERSHELL_TOOL"):
             os.environ.pop(key, None)
+        if os.name == "nt":
+            # Windows runtime tests exercise the documented RC2 profile. Tests
+            # that verify settings.json discovery explicitly remove this value.
+            os.environ["CLAUDE_CODE_USE_POWERSHELL_TOOL"] = "0"
         self.store = acgm.Store(self.data_dir)
 
     def tearDown(self) -> None:
@@ -124,6 +128,29 @@ class ProjectAndSessionTests(RuntimeTestCase):
         nested.mkdir(parents=True)
         resolved = acgm.resolve_project_root({"cwd": str(nested)})
         self.assertEqual(resolved, root.resolve())
+
+    def test_run_git_decodes_utf8_output_independent_of_locale(self) -> None:
+        expected = "/tmp/项目 with spaces"
+        completed = subprocess.CompletedProcess(
+            args=["git"], returncode=0, stdout=expected.encode("utf-8") + b"\n"
+        )
+        with mock.patch.object(acgm.subprocess, "run", return_value=completed):
+            self.assertEqual(acgm.run_git(self.base, "rev-parse", "--show-toplevel"), expected)
+
+    def test_hook_json_wire_is_independent_of_windows_code_page(self) -> None:
+        payload = {"cwd": "C:/项目 with spaces", "session_id": "会话"}
+        stream = io.TextIOWrapper(
+            io.BytesIO(json.dumps(payload, ensure_ascii=False).encode("utf-8")),
+            encoding="cp1252",
+        )
+        with mock.patch("sys.stdin", stream):
+            self.assertEqual(acgm.read_hook_input(), payload)
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            acgm.json_print(payload)
+        output.getvalue().encode("ascii")
+        self.assertEqual(json.loads(output.getvalue()), payload)
 
     def test_project_state_lifecycle(self) -> None:
         root = self.make_git_project()
@@ -254,7 +281,7 @@ class ScaffoldAndPlatformTests(RuntimeTestCase):
         subprocess.run(
             ["sh", str(REPO_ROOT / "scripts" / "governance-init.sh"), str(shell_target)],
             check=True,
-            text=True,
+            encoding="utf-8",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -296,6 +323,7 @@ class ScaffoldAndPlatformTests(RuntimeTestCase):
             os.close(descriptor)
 
     def test_git_bash_path_and_powershell_setting_can_come_from_claude_settings(self) -> None:
+        os.environ.pop("CLAUDE_CODE_USE_POWERSHELL_TOOL", None)
         git_bash = self.base / "Git" / "bin" / "bash.exe"
         git_bash.parent.mkdir(parents=True)
         git_bash.write_bytes(b"fixture")
@@ -672,7 +700,7 @@ class WriteAndLedgerTests(RuntimeTestCase):
         result = subprocess.run(
             ["sh", str(wrapper), "pretool-bash"],
             input=json.dumps({"tool_name": "Bash", "tool_input": {"command": "git status"}}),
-            text=True,
+            encoding="utf-8",
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

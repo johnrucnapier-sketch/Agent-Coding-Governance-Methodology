@@ -20,10 +20,10 @@
     "bin/acgm": "496014f431f182ce3a38a67cdf388704e0b9757996a75f965cc9a6ca34e5d0a2",
     "hooks/hooks.json": "714d9006311639eed547929bee7f49f8df272191498ad86b8a63f8e24c6ced6a",
     "scripts/acgm-hook.sh": "cee083e30bb675fa8f630eb62f3f12a26a81986cbf51de2152a6e036d10e1ab7",
-    "scripts/acgm_runtime.py": "b06f9e408f0256618cf130e025ab86a56433752cf6f1a2169e9a2fd02d7fe881",
+    "scripts/acgm_runtime.py": "0aeedf4fff6060497b1139c28a1200a0d8a46c685a5f3d3d6c6a87eca4889948",
     "scripts/build-release.sh": "9ee3afe940856777fc69be073d002292dc9e15dcce0f83e088cd4dfc0a65735e",
     "scripts/drift-check.sh": "8c0e3b6a6027bd3c112d2329088e38fa6cb1bf182708dc0f77353117c934e359",
-    "scripts/generate-package-manifest.py": "0d2434afca900902b8f92cc6ad77ed4dee6ace4ebf976724e518c744e4639f70",
+    "scripts/generate-package-manifest.py": "1d4f728612a7e28bc8e0eddcbbdae46a565072af4f3c56a150edea5e510fed64",
     "scripts/governance-init.sh": "3cfbe772608bca857f20e29029e0ce1256ba4f1ff02636f89065836cb15b209c",
     "scripts/grounding-inject.sh": "5d1ddecea299aeee773821345ed1b264a96f97a42e9a46e866f469b4173884d1",
     "scripts/post-tool-truth-first.sh": "c99cf32d99b64bec41c9940fceb88cc254a55697a702b711ab274f897a85de85",
@@ -47,10 +47,10 @@
     "tests/fixtures/safe_bash.json": "c67a5f5f362ade6b67522fcddca927f800e0e9b54f3a81b0f1652079b194f9ef",
     "tests/fixtures/session_start.json": "6e6beae21a53e43363fa6b8ed277a4004aff19d7d424ec03f4fb8671e2e618da",
     "tests/manual/CLAUDE_CODE_E2E.md": "dd8f10f8bd0370cfa9fcd06557fd7f5d983e718ee3926aff4ba962388cb2843b",
-    "tests/test_acgm_runtime.py": "8f914c03fd7be340434d064b14389b3825cb85a3f8949e31e4b6c5ccfd9bd99d",
-    "tests/test_drift_check.py": "c9d56bb03f430f154ee07d8a9be67b88f16a68ceb57414296488ed32ed9c27aa",
+    "tests/test_acgm_runtime.py": "589cd42607d52e7a94debf93ff99ecd4f4d2caceec0ecd01303bbfd6bd64de2d",
+    "tests/test_drift_check.py": "09c6e4073f8d67145b307146807d295f874fda759b506aeef3b56d8ef598dff2",
     "tests/test_preflight.py": "169eb39f56607a44f6d369e39a4a3a14a37fdf2ac5871321f8d45d39031bb676",
-    "tests/test_release_tools.py": "f20be663fc1735cbe1704c89b94f8244dbf725a629d239961cbed64c5d7b594d"
+    "tests/test_release_tools.py": "93e462bc99b13e1b3044c8414ef48ecac56749eddb7b359d6e0d968e781cc99b"
   },
   "schema_version": 1,
   "version": "0.3.0-rc.2"

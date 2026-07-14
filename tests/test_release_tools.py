@@ -30,11 +30,11 @@ class PackageManifestTests(unittest.TestCase):
     def test_filesystem_manifest_is_deterministic_and_excludes_local_material(self) -> None:
         with tempfile.TemporaryDirectory(prefix="acgm manifest 中文 ") as temporary:
             root = Path(temporary)
-            (root / "VERSION").write_text("9.8.7-rc.1\n", encoding="utf-8")
-            (root / "alpha.txt").write_text("alpha\n", encoding="utf-8")
+            (root / "VERSION").write_bytes(b"9.8.7-rc.1\n")
+            (root / "alpha.txt").write_bytes(b"alpha\n")
             (root / "目录 with space").mkdir()
             unicode_file = root / "目录 with space" / "内容.txt"
-            unicode_file.write_text("content\n", encoding="utf-8")
+            unicode_file.write_bytes(b"content\n")
             (root / "BUILD_BRIEF.md").write_text("local\n", encoding="utf-8")
             (root / "dist").mkdir()
             (root / "dist" / "old.tar.gz").write_bytes(b"old")
@@ -71,11 +71,12 @@ class PackageManifestTests(unittest.TestCase):
                 "--output",
                 str(output),
             ]
-            subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
-            subprocess.run([*command, "--check"], check=True, stdout=subprocess.PIPE, text=True)
+            subprocess.run(command, check=True, stdout=subprocess.PIPE, encoding="utf-8")
+            subprocess.run([*command, "--check"], check=True, stdout=subprocess.PIPE, encoding="utf-8")
             value = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(value["version"], "1.2.3")
             self.assertIn("payload.txt", value["files"])
+            self.assertNotIn(b"\r\n", output.read_bytes())
 
 
 class ReleaseContractTests(unittest.TestCase):
