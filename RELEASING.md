@@ -8,12 +8,17 @@ behavior on the same version. Commands are shown once and apply to both language
 
 ## 1. Release status / 发布状态
 
-`0.3.0-rc.1` is a release candidate. It may be published as a GitHub prerelease for
-real-Claude-Code testing, but it must not be promoted or described as stable until
-`tests/manual/CLAUDE_CODE_E2E.md` passes on a working Claude account.
+`0.3.0-rc.2` is an unreleased testing candidate. The source version does not imply
+that its Git tag or GitHub prerelease exists. It may be published as a GitHub
+prerelease for real-Claude-Code testing only after this runbook and human review, and
+it must not be promoted or described as stable until
+`tests/manual/CLAUDE_CODE_E2E.md` passes on a working Claude account. The controlled
+Windows profile has not yet completed real-machine E2E.
 
-`0.3.0-rc.1` 是候选版，可以作为 GitHub prerelease 发布给真实 Claude Code 测试，但
-`tests/manual/CLAUDE_CODE_E2E.md` 未在可用 Claude 账号上通过之前，不得升级或描述为稳定版。
+`0.3.0-rc.2` 是尚未发布的测试候选版；源码版本号不代表对应 Git tag 或 GitHub
+prerelease 已存在。只有本流程和人工复核完成后，才可以将它作为 GitHub prerelease 发布
+给真实 Claude Code 测试。在 `tests/manual/CLAUDE_CODE_E2E.md` 未在可用 Claude 账号上
+通过之前，不得升级或描述为稳定版。受控 Windows profile 尚未完成真机 E2E。
 
 ## 2. Freeze scope / 冻结范围
 
@@ -60,12 +65,37 @@ git status --short
 ```
 
 CI must run the first two commands on both Linux and macOS. A green CI result validates
-the local runtime contract; it does not replace real Claude Code E2E.
-Native Windows hook execution is outside this RC's validated platform matrix.
+the local runtime contract. RC2 also adds a `windows-latest` regression job for the
+controlled candidate profile: Windows 10/11 behavior through Git for Windows/Git Bash,
+Python 3.10+, and `CLAUDE_CODE_USE_POWERSHELL_TOOL=0`. CI does not replace real Claude
+Code E2E. Native PowerShell hooks are unsupported, WSL is unverified, and neither may
+be inferred from a green Windows job.
 
 在干净工作树上运行无第三方依赖的回归测试与发布契约检查。CI 必须在 Linux 和 macOS 上
-运行前两条命令。CI 通过只证明本地运行时契约，不能代替真实 Claude Code E2E。
-Windows 原生 hook 执行不在本 RC 已验证的平台矩阵内。
+运行前两条命令。RC2 还为受控候选 profile 增加 `windows-latest` 回归 job：Windows
+10/11 行为通过 Git for Windows/Git Bash、Python 3.10+ 和
+`CLAUDE_CODE_USE_POWERSHELL_TOOL=0` 测试。CI 通过只证明本地运行时契约，不能代替真实
+Claude Code E2E。Native PowerShell hooks 不受支持，WSL 尚未验证，也不能从绿色 Windows
+job 推断二者已受支持。
+
+Before installation testing, run the read-only preflight from the exact source tree:
+
+```bash
+python3 scripts/preflight.py --json
+```
+
+On the controlled Windows Git Bash profile, use an available Windows launcher if
+needed:
+
+```bash
+py -3 scripts/preflight.py --json
+```
+
+The result must be `READY_FOR_RC_TEST`. Record only the status and reason codes; the
+preflight does not install, edit settings, initialize a project, or prove live E2E.
+
+安装测试前，从准确源码树运行只读 preflight。结果必须是 `READY_FOR_RC_TEST`；只记录状态
+和 reason codes。Preflight 不安装、不改设置、不初始化项目，也不能证明真实 E2E 已通过。
 
 ## 5. Real Claude Code gate / 真实 Claude Code 门
 
@@ -79,8 +109,17 @@ Record Claude Code version, OS, ACGM version, installation source, date, tester,
 each result. Do not record account identifiers, API keys, prompts from real projects,
 or infrastructure details. Any P0/P1 failure blocks stable release.
 
+For the Windows candidate run, record and enforce this exact profile: Windows 10/11,
+Git for Windows/Git Bash, Python 3.10+, and effective
+`CLAUDE_CODE_USE_POWERSHELL_TOOL=0`. Do not execute the checklist through native
+PowerShell or WSL and call that a supported Windows result.
+
 逐项记录 Claude Code 版本、OS、ACGM 版本、安装来源、日期、测试人和结果。不得记录账号
 标识、API key、真实项目 prompt 或基础设施细节。任何 P0/P1 失败都会阻止稳定发布。
+
+Windows 候选验收必须记录并执行准确 profile：Windows 10/11、Git for Windows/Git Bash、
+Python 3.10+，以及有效的 `CLAUDE_CODE_USE_POWERSHELL_TOOL=0`。不得通过 native
+PowerShell 或 WSL 跑完后写成受支持的 Windows 结果。
 
 ## 6. Review the package / 检查发布包
 
@@ -104,39 +143,43 @@ Only after review and human approval:
 
 ```bash
 git add -- \
-  .claude-plugin .github .gitignore \
+  .claude-plugin .github .gitattributes .gitignore \
   CASES.md CHANGELOG.md CONTRIBUTING.md EVIDENCE.md LICENSING.md \
   METHODOLOGY.en.md METHODOLOGY.md PACKAGE_MANIFEST.json \
   README.md RELEASING.md VERSION bin hooks scripts skills tests
-git commit -m "feat: ACGM v0.3.0-rc.1 release candidate"
+git commit -m "feat: ACGM v0.3.0-rc.2 testing candidate"
 ./scripts/build-release.sh
-git tag -a v0.3.0-rc.1 -m "ACGM v0.3.0-rc.1"
+git tag -a v0.3.0-rc.2 -m "ACGM v0.3.0-rc.2"
 git push origin HEAD
-git push origin v0.3.0-rc.1
+git push origin v0.3.0-rc.2
 ```
 
 Create the RC as a prerelease, not a stable release:
 
 ```bash
-gh release create v0.3.0-rc.1 \
+gh release create v0.3.0-rc.2 \
   --prerelease \
-  --title "ACGM v0.3.0-rc.1" \
+  --title "ACGM v0.3.0-rc.2" \
   --notes-file CHANGELOG.md \
-  dist/Agent-Coding-Governance-Methodology-0.3.0-rc.1.tar.gz \
-  dist/Agent-Coding-Governance-Methodology-0.3.0-rc.1.tar.gz.sha256
+  dist/Agent-Coding-Governance-Methodology-0.3.0-rc.2.tar.gz \
+  dist/Agent-Coding-Governance-Methodology-0.3.0-rc.2.tar.gz.sha256
 ```
 
 These commands are a runbook, not authorization. The human reviews the exact diff,
-commit, tag, and release before execution.
+commit, tag, and release before execution. Until the tag command and push have
+actually succeeded, documentation must continue to call RC2 unreleased and the
+`#v0.3.0-rc.2` install source unavailable.
 
 以上命令只是 runbook，不构成授权。执行前由人审查准确 diff、commit、tag 与 release。
+在 tag 创建并成功推送之前，文档必须继续把 RC2 写成尚未发布，`#v0.3.0-rc.2` 安装源也
+仍不可用。
 
 ## 8. Fresh install and upgrade smoke tests / 全新安装与升级冒烟
 
 Test both a clean install and an update from the previously published plugin:
 
 ```bash
-claude plugin marketplace add johnrucnapier-sketch/Agent-Coding-Governance-Methodology@v0.3.0-rc.1
+claude plugin marketplace add https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology.git#v0.3.0-rc.2
 claude plugin install agent-coding-governance-methodology@agent-coding-governance-methodology
 claude plugin marketplace update agent-coding-governance-methodology
 claude plugin update agent-coding-governance-methodology@agent-coding-governance-methodology
@@ -154,14 +197,22 @@ acgm version
 acgm doctor --strict
 ```
 
-Run these commands through Bash launched by plugin-enabled Claude Code. The plugin
+The pinned marketplace command is valid only after `v0.3.0-rc.2` is published. Before
+that, a local-source smoke test must record the exact commit and must not be reported
+as a successful GitHub install.
+
+Run these commands through Bash launched by plugin-enabled Claude Code. On Windows,
+that means the controlled Git for Windows/Git Bash profile with
+`CLAUDE_CODE_USE_POWERSHELL_TOOL=0`. The plugin
 does not promise an `acgm` PATH entry in an ordinary login shell; a repository clone
 uses `./bin/acgm`. Verify that hook events and `acgm report` resolve the same official
 plugin-data directory.
 
-这些命令通过插件已启用的 Claude Code Bash 运行。插件不承诺普通 login shell 具有
-`acgm` PATH；仓库 clone 使用 `./bin/acgm`。同时确认 hook 事件与 `acgm report` 解析到
-同一官方 plugin-data 目录。
+固定 marketplace 命令只在 `v0.3.0-rc.2` 发布后有效。此前的本地源码冒烟必须记录准确
+commit，不得写成 GitHub 安装成功。命令通过插件已启用的 Claude Code Bash 运行；Windows
+下必须是 `CLAUDE_CODE_USE_POWERSHELL_TOOL=0` 的受控 Git for Windows/Git Bash profile。
+插件不承诺普通 login shell 具有 `acgm` PATH；仓库 clone 使用 `./bin/acgm`。同时确认
+hook 事件与 `acgm report` 解析到同一官方 plugin-data 目录。
 
 The installed and running version must match the release. Doctor may report project
 governance as partial; that is not a package failure. Do not auto-modify user project
@@ -188,16 +239,19 @@ retained Event Ledger is still readable. ACGM never automatically uploads ledger
 
 Promote to `0.3.0` only when all of the following are true:
 
-- automated Linux and macOS checks pass;
+- automated Linux, macOS, and controlled `windows-latest` checks pass;
 - the real Claude Code E2E checklist passes;
+- any Windows support claim is backed by a full real-machine pass on the exact
+  controlled Windows Git Bash profile;
 - no open P0/P1 mechanism or privacy defect remains;
 - README claims match observed behavior;
 - version, tag, release, marketplace source, and installed package agree.
 
 只有满足以下条件才升级到 `0.3.0`：
 
-- Linux 与 macOS 自动检查全部通过；
+- Linux、macOS 与受控 `windows-latest` 自动检查全部通过；
 - 真实 Claude Code E2E 清单通过；
+- 任何 Windows 支持声明都有准确受控 Windows Git Bash profile 的完整真机通过作为证据；
 - 没有未解决的 P0/P1 机制或隐私缺陷；
 - README 声明与实际观察一致；
 - version、tag、release、marketplace 来源和安装包完全一致。

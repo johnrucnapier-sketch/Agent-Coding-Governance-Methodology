@@ -222,12 +222,18 @@ TOTAL=$(grep -c . "$TMP/detected" 2>/dev/null || true); TOTAL=${TOTAL:-0}
 } > "$REPORT"
 
 if [ "$JSON" = 1 ]; then
-  if ! command -v python3 >/dev/null 2>&1; then
-    echo "--json requires python3" >&2
+  if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+    set -- python3
+  elif command -v python >/dev/null 2>&1 && python -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+    set -- python
+  elif command -v py >/dev/null 2>&1 && py -3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+    set -- py -3
+  else
+    echo "--json requires Python 3.10+ exposed as python3, python, or py -3" >&2
     exit 2
   fi
   JSON_REPORT="$TMP/report.json"
-  python3 - "$ROOT" "$n1" "$n2" "$n3" "$n4" "$TOTAL" "$TMP/detected" "$TMP/ignored" > "$JSON_REPORT" <<'PY'
+  "$@" - "$ROOT" "$n1" "$n2" "$n3" "$n4" "$TOTAL" "$TMP/detected" "$TMP/ignored" > "$JSON_REPORT" <<'PY'
 import json, pathlib, sys
 root, n1, n2, n3, n4, total, detected, ignored = sys.argv[1:]
 def lines(path):

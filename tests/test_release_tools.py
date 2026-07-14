@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -61,7 +62,7 @@ class PackageManifestTests(unittest.TestCase):
             (root / "payload.txt").write_text("payload\n", encoding="utf-8")
             output = root / "PACKAGE_MANIFEST.json"
             command = [
-                "python3",
+                sys.executable,
                 str(REPO_ROOT / "scripts" / "generate-package-manifest.py"),
                 "--root",
                 str(root),
@@ -90,6 +91,31 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("executable_modes", results.passed)
         self.assertIn("release_path_hygiene", results.passed)
 
+    def test_hook_commands_use_quoted_runtime_environment_expansion(self) -> None:
+        value = json.loads((REPO_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        handlers = [
+            handler
+            for groups in value["hooks"].values()
+            for group in groups
+            for handler in group.get("hooks", [])
+        ]
+        self.assertGreater(len(handlers), 0)
+        for handler in handlers:
+            with self.subTest(command=handler.get("command")):
+                self.assertNotIn("args", handler)
+                self.assertNotIn("shell", handler)
+                self.assertNotIn("${CLAUDE_PLUGIN_", handler["command"])
+                self.assertRegex(handler["command"], release_check.HOOK_SHELL_COMMAND)
+
+    def test_shell_launchers_cover_standard_windows_python_names(self) -> None:
+        for relative in ("bin/acgm", "scripts/acgm-hook.sh"):
+            content = (REPO_ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(relative=relative):
+                self.assertIn("command -v python3", content)
+                self.assertIn("command -v python", content)
+                self.assertIn("command -v py", content)
+                self.assertIn("py -3", content)
+
     def test_bilingual_contract_checker_reports_codes_not_document_content(self) -> None:
         with tempfile.TemporaryDirectory(prefix="acgm docs contract ") as temporary:
             root = Path(temporary)
@@ -105,12 +131,17 @@ class ReleaseContractTests(unittest.TestCase):
             self.assertEqual(results.errors, [])
             self.assertIn("bilingual_contract", results.passed)
 
-    def test_ci_targets_linux_and_macos(self) -> None:
+    def test_ci_targets_linux_macos_and_controlled_windows_profile(self) -> None:
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("ubuntu-latest", workflow)
         self.assertIn("macos-latest", workflow)
+        self.assertIn("windows-latest", workflow)
+        self.assertIn("CLAUDE_CODE_USE_POWERSHELL_TOOL", workflow)
+        self.assertIn("shell: bash", workflow)
         self.assertIn("unittest discover", workflow)
         self.assertIn("release_check.py", workflow)
+        self.assertIn("generate-package-manifest.py --check --source git", workflow)
+        self.assertNotIn("run: python3 ", workflow)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,6 @@ import argparse
 import collections
 from contextlib import contextmanager
 import datetime as dt
-import fcntl
 import hashlib
 import hmac
 import json
@@ -28,6 +27,16 @@ import tempfile
 import uuid
 from typing import Any, Iterable
 
+try:  # Unix advisory locks.
+    import fcntl as _fcntl
+except ImportError:  # pragma: no cover - exercised by Windows CI.
+    _fcntl = None
+
+try:  # Windows byte-range locks.
+    import msvcrt as _msvcrt
+except ImportError:  # pragma: no cover - exercised by POSIX CI.
+    _msvcrt = None
+
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_ID = "agent-coding-governance-methodology@agent-coding-governance-methodology"
@@ -39,6 +48,68 @@ GATE_MARKERS = (
     "ACGM-VERIFY-AFTER:",
     "ACGM-ROLLBACK:",
 )
+
+
+def restrict_descriptor(descriptor: int, mode: int = 0o600) -> None:
+    """Apply best-effort descriptor permissions without requiring Unix APIs.
+
+    ``os.fchmod`` was not available on Windows before Python 3.13. The plugin's
+    Windows Git Bash candidate supports Python 3.10+, so permissions must never
+    be the reason the runtime crashes. Windows access remains governed by the
+    user's profile ACL; POSIX keeps the explicit restrictive mode.
+    """
+
+    fchmod = getattr(os, "fchmod", None)
+    if os.name == "nt":
+        if not callable(fchmod):
+            return
+        try:
+            fchmod(descriptor, mode)
+        except OSError:
+            # Windows 3.10-3.12 lack fd chmod, and later Windows versions map
+            # modes to limited ACL/read-only semantics. Preflight reports that
+            # this RC does not yet attest an equivalent Windows DACL guarantee.
+            return
+    else:
+        if not callable(fchmod):
+            raise OSError("fchmod unavailable on POSIX runtime")
+        fchmod(descriptor, mode)
+
+
+@contextmanager
+def exclusive_file_lock(path: Path) -> Iterable[None]:
+    """Serialize state updates with stdlib-only POSIX or Windows locks."""
+
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    descriptor = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+    restrict_descriptor(descriptor)
+    locked = False
+    try:
+        if _fcntl is not None:
+            _fcntl.flock(descriptor, _fcntl.LOCK_EX)
+        elif _msvcrt is not None:  # pragma: no branch - platform exclusive.
+            # msvcrt.locking locks from the current offset and needs a real byte.
+            if os.fstat(descriptor).st_size == 0:
+                os.write(descriptor, b"\0")
+                os.fsync(descriptor)
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            _msvcrt.locking(descriptor, _msvcrt.LK_LOCK, 1)
+        else:  # No supported lock primitive means state cannot be trusted.
+            raise OSError("no supported file-lock implementation")
+        locked = True
+        yield
+    finally:
+        if locked:
+            try:
+                if _fcntl is not None:
+                    _fcntl.flock(descriptor, _fcntl.LOCK_UN)
+                elif _msvcrt is not None:
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    _msvcrt.locking(descriptor, _msvcrt.LK_UNLCK, 1)
+            finally:
+                os.close(descriptor)
+        else:
+            os.close(descriptor)
 
 
 def read_version() -> str:
@@ -121,6 +192,83 @@ def get_data_dir() -> Path:
         return Path(configured).expanduser()
     config_root = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))).expanduser()
     return config_root / "plugins" / "data" / PLUGIN_DATA_KEY
+
+
+def effective_claude_env(name: str) -> str | None:
+    """Return one Claude environment setting without exposing other config.
+
+    Claude normally exports ``settings.json`` ``env`` entries to child
+    processes. Reading the same single value here also makes an interactive
+    ``acgm doctor`` useful before Claude Code has started.
+    """
+
+    if name in os.environ:
+        return os.environ[name]
+    config_root = Path(
+        os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))
+    ).expanduser()
+    try:
+        settings = json.loads((config_root / "settings.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    configured = settings.get("env") if isinstance(settings, dict) else None
+    value = configured.get(name) if isinstance(configured, dict) else None
+    return value if isinstance(value, str) else None
+
+
+def _git_bash_executable(path_value: str, *, explicitly_configured: bool) -> bool:
+    """Validate a Git for Windows shell path, excluding the WSL launcher."""
+
+    if not path_value.strip():
+        return False
+    candidate = Path(os.path.expandvars(path_value.strip().strip('"'))).expanduser()
+    if not candidate.is_file():
+        return False
+    normalized = str(candidate).replace("\\", "/").casefold()
+    basename = candidate.name.casefold()
+    if basename not in {"bash", "bash.exe", "sh", "sh.exe"}:
+        return False
+    if "/windows/system32/" in normalized:
+        return False
+    if explicitly_configured:
+        return basename in {"bash", "bash.exe"}
+    return "/git/" in normalized or bool(
+        re.match(r"^(?:mingw|msys)", os.environ.get("MSYSTEM", ""), re.I)
+    )
+
+
+def windows_git_bash_status() -> tuple[bool, str]:
+    """Return availability and a non-sensitive reason code for Git Bash."""
+
+    configured = effective_claude_env("CLAUDE_CODE_GIT_BASH_PATH")
+    if configured is not None:
+        if _git_bash_executable(configured, explicitly_configured=True):
+            return True, "configured_path"
+        return False, "configured_path_invalid"
+
+    common_roots = [
+        os.environ.get("ProgramFiles"),
+        os.environ.get("ProgramFiles(x86)"),
+        os.environ.get("LocalAppData"),
+    ]
+    common_paths: list[Path] = []
+    for index, root_value in enumerate(common_roots):
+        if not root_value:
+            continue
+        root = Path(root_value)
+        if index < 2:
+            common_paths.append(root / "Git" / "bin" / "bash.exe")
+        else:
+            common_paths.append(root / "Programs" / "Git" / "bin" / "bash.exe")
+    for candidate in common_paths:
+        if _git_bash_executable(str(candidate), explicitly_configured=False):
+            return True, "standard_install"
+
+    for command in ("bash", "sh"):
+        resolved = shutil.which(command)
+        if resolved and _git_bash_executable(resolved, explicitly_configured=False):
+            return True, "path_lookup"
+    return False, "not_found"
 
 
 class Store:
@@ -228,19 +376,16 @@ class Store:
             if isinstance(value, str) and ("/" in value or "\\" in value or "://" in value):
                 raise ValueError(f"unsafe ledger value for {key}")
         line = json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
-        fd = os.open(self.root / "events.jsonl", os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
-        try:
-            os.fchmod(fd, 0o600)
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            remaining = memoryview(line.encode("utf-8"))
-            while remaining:
-                written = os.write(fd, remaining)
-                if written <= 0:
-                    raise OSError("short event ledger write")
-                remaining = remaining[written:]
-        finally:
+        with exclusive_file_lock(self.root / "locks" / "events.lock"):
+            fd = os.open(self.root / "events.jsonl", os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
             try:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+                restrict_descriptor(fd)
+                remaining = memoryview(line.encode("utf-8"))
+                while remaining:
+                    written = os.write(fd, remaining)
+                    if written <= 0:
+                        raise OSError("short event ledger write")
+                    remaining = remaining[written:]
             finally:
                 os.close(fd)
         return event_id
@@ -248,12 +393,9 @@ class Store:
     def events(self) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []
         try:
-            with (self.root / "events.jsonl").open(encoding="utf-8") as handle:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
-                try:
+            with exclusive_file_lock(self.root / "locks" / "events.lock"):
+                with (self.root / "events.jsonl").open(encoding="utf-8") as handle:
                     lines = handle.read().splitlines()
-                finally:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
         except OSError:
             return result
         for line in lines:
@@ -311,19 +453,8 @@ class Store:
     def obligations_lock(self, session_id: str) -> Iterable[None]:
         """Serialize per-session obligation updates across parallel hooks."""
         self.ensure()
-        directory = self.root / "locks"
-        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        lock_path = directory / f"{session_id}.lock"
-        descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
-        try:
-            os.fchmod(descriptor, 0o600)
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
+        with exclusive_file_lock(self.root / "locks" / f"{session_id}.lock"):
             yield
-        finally:
-            try:
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
-            finally:
-                os.close(descriptor)
 
     def load_obligations(self, session_id: str) -> list[dict[str, Any]]:
         try:
@@ -380,6 +511,7 @@ def package_integrity() -> tuple[list[str], list[str]]:
         "hooks/hooks.json",
         "scripts/acgm-hook.sh",
         "scripts/acgm_runtime.py",
+        "scripts/preflight.py",
         "bin/acgm",
         "skills/session-grounding/SKILL.md",
         "skills/truth-first/SKILL.md",
@@ -388,10 +520,11 @@ def package_integrity() -> tuple[list[str], list[str]]:
     for relative in required:
         if not (PLUGIN_ROOT / relative).is_file():
             errors.append(f"missing:{relative}")
-    for relative in ("scripts/acgm-hook.sh", "scripts/acgm_runtime.py", "bin/acgm"):
-        path = PLUGIN_ROOT / relative
-        if path.exists() and not os.access(path, os.X_OK):
-            errors.append(f"not_executable:{relative}")
+    if os.name != "nt":
+        for relative in ("scripts/acgm-hook.sh", "scripts/acgm_runtime.py", "bin/acgm"):
+            path = PLUGIN_ROOT / relative
+            if path.exists() and not os.access(path, os.X_OK):
+                errors.append(f"not_executable:{relative}")
     try:
         manifest = json.loads((PLUGIN_ROOT / ".claude-plugin/plugin.json").read_text(encoding="utf-8"))
         if manifest.get("version") != ACGM_VERSION:
@@ -434,8 +567,21 @@ def package_integrity() -> tuple[list[str], list[str]]:
             errors.append("package_manifest_invalid")
     else:
         warnings.append("package_manifest_missing")
-    if shutil.which("python3") is None:
-        errors.append("python3_missing")
+    if sys.version_info < (3, 10):
+        errors.append("python_too_old")
+    if os.name == "nt":
+        git_bash_available, _ = windows_git_bash_status()
+        if not git_bash_available:
+            errors.append("windows_git_bash_missing")
+        if effective_claude_env("CLAUDE_CODE_USE_POWERSHELL_TOOL") != "0":
+            errors.append("windows_powershell_tool_must_be_disabled")
+        warnings.extend(
+            [
+                "windows_acl_equivalence_unvalidated",
+                "windows_git_bash_candidate_only",
+                "powershell_native_unsupported",
+            ]
+        )
     return errors, warnings
 
 
@@ -452,13 +598,12 @@ def store_integrity(store: Store, *, scan_obligations: bool = True) -> tuple[lis
         events_path = store.root / "events.jsonl"
         descriptor = os.open(events_path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
         try:
-            os.fchmod(descriptor, 0o600)
+            restrict_descriptor(descriptor)
         finally:
             os.close(descriptor)
         if events_path.stat().st_size:
-            with events_path.open("rb") as handle:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
-                try:
+            with exclusive_file_lock(store.root / "locks" / "events.lock"):
+                with events_path.open("rb") as handle:
                     size = handle.seek(0, os.SEEK_END)
                     offset = max(0, size - 1024 * 1024)
                     handle.seek(offset)
@@ -469,8 +614,6 @@ def store_integrity(store: Store, *, scan_obligations: bool = True) -> tuple[lis
                         value = json.loads(line.decode("utf-8", "strict"))
                         if not isinstance(value, dict) or value.get("schema_version") != EVENT_SCHEMA_VERSION:
                             raise ValueError("invalid event ledger record")
-                finally:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
         if scan_obligations:
             obligations_dir = store.root / "obligations"
@@ -1581,17 +1724,148 @@ def command_doctor(args: argparse.Namespace) -> int:
     return 2 if broken else (1 if args.strict and attention else 0)
 
 
+AGENTS_SCAFFOLD = """# Agent governance / agent 治理约束
+
+This project uses agent-coding-governance. The rules below are non-negotiable and
+apply to every session. Read and follow them before doing anything.
+
+本项目启用 agent-coding-governance。以下规则不可妥协,适用于每个 session。
+动手前先读并遵守。
+
+## Before acting / 动手前:grounding(5 steps / 五步)
+
+1. Read `CONSTITUTION.md` + the root rules in full — not skim. /
+   完整读 `CONSTITUTION.md` + 根规则,不跳读。
+2. Identify which track / scope this session is in; load that layer's docs. /
+   判断本次落在哪个轨道/范围,加读对应层文档。
+3. Report these 5, then WAIT for human confirmation before acting: which track;
+   `git log` + `git status`; structure seen by actually reading code (not memory);
+   exact file list you will change; the steps you will take. /
+   报告这 5 项后等人确认再动手:落在哪个轨道;`git log`+`git status`;实际读代码
+   看到的结构(不凭印象);要改的文件清单;打算的执行步骤。
+4. After changes, run the verification scripts. / 改完跑验证脚本。
+5. Closing report + commit draft — wait for human approval before committing. /
+   收尾报告 + commit 草稿,等人审批再 commit。
+
+## Before any technical conclusion or irreversible action / 写结论或不可逆操作前:truth-first
+
+- Every claim carries `file:line` from grep/reading code. No "I think / usually /
+  I recall". If you cannot read a truth source, say so — never guess. /
+  每条结论带 grep/读码得到的 `文件:行号`。禁"我觉得/通常/我记得"。读不到真值就直说,不许编。
+- A summary is never code-truth: never inherit a code fact from a summary,
+  handoff, or memory layer — read it from the code now. /
+  摘要永不作为代码真值:不从摘要/交接/记忆层继承代码事实——当下从代码读。
+- Before destructive ops: list what is affected + write a rollback + quote the
+  human's authorization verbatim. /
+  破坏性操作前:列影响面 + 写回滚 + 原文引用人的授权。
+- Before a high-risk Bash retry, use the exact four fields required by the ACGM
+  gate: `ACGM-EVIDENCE:`, `ACGM-CURRENT-STATE:`, `ACGM-VERIFY-AFTER:`, and
+  `ACGM-ROLLBACK:`. The hook denies missing evidence before asking the human. /
+  重试高风险 Bash 前,按 ACGM 门控准确填写四个字段;缺证据时 hook 会先拒绝,不会把
+  不完整操作直接交给人批准。
+
+## Scope / 范围
+
+Default rule: only content needed for the software to be built / shipped / run
+belongs here; business / strategy / non-software planning is OUT. This criterion
+is a default — redefine it for your project if needed, but keep it explicit. /
+默认判据:只有"为软件能开发/上线/运行"的内容属于这里;经营/战略/与软件无关的
+规划 = OUT。此判据是默认值——需要可按项目重定义,但必须显式。
+
+> Full methodology: see the agent-coding-governance-methodology repo
+> (METHODOLOGY.md). Full setup is human-driven (governance-bootstrap / §12). /
+> 完整方法论见 agent-coding-governance-methodology 仓库;完整搭建是人驱动的。
+"""
+
+
+CLAUDE_SCAFFOLD = """# Root rules — meta + pointers, never facts / 根规则 — 元规则+指针,绝不放事实
+
+This project uses agent-coding-governance.
+
+- If the Claude Code plugin is installed, its lifecycle hooks report the project
+  state and inject grounding — follow them. Run `acgm doctor` when the state is
+  partial, drifted, or broken. If the plugin is absent, read `AGENTS.md`.
+- Governance constitution: `./CONSTITUTION.md` (humans only).
+- This file holds only meta-rules, pointers, and behavior constraints — never
+  facts that can be re-derived from code (Principle 2).
+
+本项目启用 agent-coding-governance。
+
+- 装了 Claude Code 插件:生命周期 hooks 会报告项目状态并注入 grounding,照做。
+  状态为 partial/drifted/broken 时运行 `acgm doctor`;没装则读 `AGENTS.md`。
+- 治理宪法:`./CONSTITUTION.md`(仅人可改)。
+- 本文件只装元规则、指针、行为约束——绝不写能从代码反推的事实(第 2 原则)。
+"""
+
+
+def create_file_exclusive(path: Path, content: bytes) -> bool:
+    """Create one scaffold file atomically; never follow or replace a path."""
+
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        return False
+    complete = False
+    try:
+        remaining = memoryview(content)
+        while remaining:
+            written = os.write(descriptor, remaining)
+            if written <= 0:
+                raise OSError("short scaffold write")
+            remaining = remaining[written:]
+        os.fsync(descriptor)
+        complete = True
+    finally:
+        try:
+            os.close(descriptor)
+        finally:
+            if not complete:
+                try:
+                    os.unlink(path)
+                except FileNotFoundError:
+                    pass
+    return True
+
+
+def scaffold_project(target: Path) -> tuple[int, int]:
+    template = PLUGIN_ROOT / "templates" / "CONSTITUTION.skeleton.md"
+    if not template.is_file():
+        raise FileNotFoundError(f"constitution template missing: {template}")
+
+    entries = (
+        ("CONSTITUTION.md", template.read_bytes(), "CONSTITUTION.md  (fill every <...> — humans only / 仅人可改)"),
+        ("AGENTS.md", AGENTS_SCAFFOLD.encode("utf-8"), "AGENTS.md  (generic agent-governance directive)"),
+        ("CLAUDE.md", CLAUDE_SCAFFOLD.encode("utf-8"), "CLAUDE.md  (thin pointer)"),
+    )
+    created = 0
+    skipped = 0
+    print(f"agent-coding-governance · scaffold → {target}")
+    print("----------------------------------------------------------------")
+    for filename, content, created_label in entries:
+        path = target / filename
+        if create_file_exclusive(path, content):
+            print(f"  • create / 新建: {created_label}")
+            created += 1
+        else:
+            print(f"  • skip / 跳过 (已存在,未改动): {filename}")
+            skipped += 1
+    print("----------------------------------------------------------------")
+    print(f"Done / 完成: created {created}, skipped {skipped}.")
+    return created, skipped
+
+
 def command_init(args: argparse.Namespace) -> int:
-    """Run the existing non-overwriting scaffold through one stable entry point."""
+    """Create the non-overwriting scaffold without a shell dependency."""
     try:
         target = resolve_project_root(explicit=args.project)
     except (FileNotFoundError, NotADirectoryError) as error:
         print(f"ACGM init: {error}", file=sys.stderr)
         return 2
-    script = PLUGIN_ROOT / "scripts" / "governance-init.sh"
-    result = subprocess.run(["sh", str(script), str(target)], check=False)
-    if result.returncode != 0:
-        return result.returncode
+    try:
+        scaffold_project(target)
+    except OSError as error:
+        print(f"ACGM init: {error}", file=sys.stderr)
+        return 2
     # Record the resulting adoption state, but never rewrite user-owned files.
     report = doctor_report(str(target), update=True)
     print(f"ACGM project state: {report['project_state']}")

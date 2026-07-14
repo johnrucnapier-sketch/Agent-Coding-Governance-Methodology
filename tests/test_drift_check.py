@@ -45,7 +45,7 @@ class DriftCheckTests(unittest.TestCase):
             stdout_payload = json.loads(result.stdout)
             file_payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(stdout_payload, file_payload)
-            self.assertEqual(stdout_payload["project_root"], str(project.resolve()))
+            self.assertEqual(Path(stdout_payload["project_root"]).resolve(), project.resolve())
             self.assertEqual(stdout_payload["summary"]["total"], 0)
 
 

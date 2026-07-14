@@ -2,10 +2,12 @@
 
 This checklist requires a working Claude Code account or official Claude API route.
 It validates the real plugin lifecycle that unit tests cannot simulate. ACGM
-`0.3.0-rc.1` must not be promoted to stable until this checklist passes.
+`0.3.0-rc.2` is an unreleased testing candidate and must not be promoted to stable
+until this checklist passes.
 
 本清单需要可用的 Claude Code 账号或官方 Claude API 路径，用于验证单元测试无法模拟的
-真实插件生命周期。ACGM `0.3.0-rc.1` 未通过本清单之前不得升级为稳定版。
+真实插件生命周期。ACGM `0.3.0-rc.2` 是尚未发布的测试候选版，未通过本清单之前不得
+升级为稳定版。
 
 ## Safety boundary / 安全边界
 
@@ -37,22 +39,68 @@ the model identity behind a compatible endpoint.
 | Date / 日期 | |
 | Tester / 测试人 | |
 | OS and architecture | |
-| Claude Code version (must be >= `2.1.143`) | |
+| Claude Code version (record the actual current version) | |
 | ACGM version | |
 | Install source / 安装来源 | GitHub marketplace / local release candidate |
 | Runtime route / 运行路径 | Claude account / official Claude API / compatible third-party endpoint / unknown |
 | Python version (must be >= `3.10`) | |
+| Shell profile / Shell 配置 | macOS/Linux Bash / Windows Git Bash candidate |
+| Windows PowerShell tool setting | N/A / effective `CLAUDE_CODE_USE_POWERSHELL_TOOL=0` |
+| Source identity / 源码身份 | exact commit / published tag |
 
-Stable promotion requires at least one full pass on `Claude account` or
-`official Claude API`. A compatible third-party endpoint may be recorded as an
-additional compatibility observation, not substituted for that gate.
-The current RC platform gate is macOS or Linux. A native Windows run is exploratory
-until its hook execution path is separately validated.
+Stable promotion requires at least one full pass on `Claude account` or `official
+Claude API`. A compatible third-party endpoint may be recorded as an additional
+compatibility observation, not substituted for that gate. Use a current, working
+Claude Code and record its actual version; preflight plus live E2E, not an unsupported
+hard-coded minimum, determine this candidate's compatibility. RC2 also defines one
+controlled Windows testing profile: **Windows 10/11 + Git for Windows/Git Bash +
+Python 3.10+ + effective `CLAUDE_CODE_USE_POWERSHELL_TOOL=0`**. A Windows pass must
+use that exact profile and remains candidate evidence until this entire checklist is
+completed on a real machine. Native PowerShell hooks are unsupported and WSL is
+unverified; neither counts as a supported Windows result.
 
 稳定版至少需要一次 `Claude account` 或 `official Claude API` 的完整通过。第三方兼容
-接口可以作为附加兼容性观察，但不能替代该门槛。
-当前 RC 的平台门是 macOS 或 Linux；Windows 原生运行在 hook 执行路径被单独验证前只算
-探索性结果。
+接口可以作为附加兼容性观察，但不能替代该门槛。使用当前可用的 Claude Code 并记录实际
+版本；兼容性由 preflight 和真实 E2E 决定，不使用缺乏证据的硬编码最低版本。RC2 还定义
+一个受控 Windows 测试 profile：**Windows 10/11 + Git for Windows/Git Bash + Python
+3.10+ + 有效的 `CLAUDE_CODE_USE_POWERSHELL_TOOL=0`**。Windows 通过必须使用这个准确
+profile，并且在真机完整跑完本清单前仍只是候选证据。Native PowerShell hooks 不受支持，
+WSL 尚未验证，二者都不能计为受支持的 Windows 结果。
+
+## 0. Read-only preflight and Windows profile / 只读预检与 Windows 配置
+
+Run preflight from the exact source tree before installation. On macOS/Linux:
+
+```bash
+python3 scripts/preflight.py --json
+```
+
+On Windows, open **Git for Windows/Git Bash**, not native PowerShell or WSL. Ensure
+Python 3.10+ is available as `python3`, `python`, or `py -3`; set the effective Claude
+Code environment value before launching Claude Code, then run:
+
+```bash
+export CLAUDE_CODE_USE_POWERSHELL_TOOL=0
+py -3 scripts/preflight.py --json
+```
+
+If Claude Code requires an explicit Git Bash location, configure
+`CLAUDE_CODE_GIT_BASH_PATH` to the existing Git for Windows `bash.exe` path before
+running preflight. Do not record that private path in the shared test result.
+
+Expected / 预期：status is `READY_FOR_RC_TEST`, `read_only` is `true`, Python, Git,
+and Claude Code checks pass, and the Windows profile additionally reports Git Bash
+ready plus `powershell_tool_disabled.ok=true`. Record only the status, versions, and
+reason codes. Preflight must not install anything, edit settings, initialize a
+project, or infer the account/model behind the runtime route. A ready result is not an
+E2E pass.
+
+安装前必须从准确源码树运行 preflight。Windows 必须打开 **Git for Windows/Git Bash**，
+不得使用 native PowerShell 或 WSL；Python 3.10+ 可以通过 `python3`、`python` 或 `py -3`
+提供。Claude Code 启动前令有效环境值为 `CLAUDE_CODE_USE_POWERSHELL_TOOL=0`。如果必须
+显式指定 Git Bash，则把 `CLAUDE_CODE_GIT_BASH_PATH` 配置为实际存在的 Git for Windows
+`bash.exe`，但不要在共享结果中记录该私有路径。只记录 status、版本与 reason codes；
+preflight ready 不等于 E2E 通过。
 
 ## 1. Create a disposable project / 创建可丢弃项目
 
@@ -81,8 +129,15 @@ find acgm-e2e-delete-me -maxdepth 2 -type f -print
 
 Use the release source under test:
 
+The pinned GitHub command below is valid only after the `v0.3.0-rc.2` tag is actually
+published. Before publication, use the reviewed local candidate source, record its
+exact commit, and mark the GitHub-install path **BLOCKED** rather than pretending the
+tag exists. / 下列固定 GitHub 命令只有在 `v0.3.0-rc.2` tag 实际发布后才有效。发布前请
+使用已审查的本地候选源码并记录准确 commit；GitHub 安装路径应记 **BLOCKED**，不得假装
+tag 已存在。
+
 ```bash
-claude plugin marketplace add johnrucnapier-sketch/Agent-Coding-Governance-Methodology@v0.3.0-rc.1
+claude plugin marketplace add https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology.git#v0.3.0-rc.2
 claude plugin install agent-coding-governance-methodology@agent-coding-governance-methodology
 ```
 
@@ -104,7 +159,7 @@ acgm version
 acgm doctor --json
 ```
 
-Expected / 预期：version is exactly `0.3.0-rc.1`; package/runtime is healthy; the new
+Expected / 预期：version is exactly `0.3.0-rc.2`; package/runtime is healthy; the new
 project is `INSTALLED_NOT_BOOTSTRAPPED`, not falsely reported as governed.
 If `command -v acgm` fails inside plugin-enabled Claude Code Bash, mark this step
 **FAIL**; do not substitute a hidden cache path and call the installation flow
@@ -119,6 +174,12 @@ plugin-enabled Claude Code Bash so CLI and hooks inherit the same isolated
 Claude Code Bash 运行，让 CLI 与 hooks 继承同一隔离 `ACGM_DATA_DIR`。
 
 ## 3. Initialize without overwriting / 初始化且不覆盖
+
+Use `acgm init` on every platform. Its scaffold path is implemented in Python and is
+the Windows initialization path. Do not substitute the POSIX-only
+`scripts/governance-init.sh` fallback for a Windows plugin-lifecycle result. /
+所有平台都使用 `acgm init`；它的脚手架路径由 Python 实现，也是 Windows 初始化主路径。
+不得用仅限 POSIX 的 `scripts/governance-init.sh` fallback 替代 Windows 插件生命周期结果。
 
 First verify that an invalid explicit path fails instead of falling back to the current
 repository:
@@ -146,9 +207,9 @@ components are intentionally incomplete.
 Prove idempotence:
 
 ```bash
-shasum CONSTITUTION.md CLAUDE.md AGENTS.md
+git hash-object CONSTITUTION.md CLAUDE.md AGENTS.md
 acgm init .
-shasum CONSTITUTION.md CLAUDE.md AGENTS.md
+git hash-object CONSTITUTION.md CLAUDE.md AGENTS.md
 ```
 
 Expected / 预期：both hash sets match; existing files are skipped, not overwritten.
@@ -421,6 +482,7 @@ override 后验证官方 plugin-data 中的事件仍可读取。
 
 | ID | Check / 检查 | Result | Evidence note / 证据说明 |
 |---|---|---|---|
+| E2E-00 | Preflight + exact platform profile | PASS / FAIL / BLOCKED | |
 | E2E-01 | Install identity | PASS / FAIL / BLOCKED | |
 | E2E-02 | Init + idempotence | PASS / FAIL / BLOCKED | |
 | E2E-03 | SessionStart transitions | PASS / FAIL / BLOCKED | |
@@ -438,13 +500,15 @@ override 后验证官方 plugin-data 中的事件仍可读取。
 ## Stable-release decision / 稳定版裁定
 
 - **PASS:** every applicable row passes on a genuine Claude route; no open P0/P1
-  mechanism or privacy defect.
+  mechanism or privacy defect. A Windows support claim additionally requires a full
+  pass on the exact controlled Windows Git Bash profile.
 - **FAIL:** observed behavior contradicts the release contract. Record the exact
   desensitized symptom, fix it, issue a new RC, and rerun the checklist.
 - **BLOCKED:** the environment could not exercise the behavior. Do not convert blocked
   into pass and do not promote stable.
 
-- **PASS：** 在真实 Claude 路径上所有适用项目通过，且没有 P0/P1 机制或隐私缺陷。
+- **PASS：** 在真实 Claude 路径上所有适用项目通过，且没有 P0/P1 机制或隐私缺陷；任何
+  Windows 支持声明还必须有准确受控 Windows Git Bash profile 的完整通过。
 - **FAIL：** 实际行为违反发布契约。记录准确的脱敏现象，修复、发布新 RC 并重跑。
 - **BLOCKED：** 环境无法执行该项。不得把 blocked 写成 pass，也不得升级稳定版。
 

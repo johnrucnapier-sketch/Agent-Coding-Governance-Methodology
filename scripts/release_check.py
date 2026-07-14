@@ -33,6 +33,11 @@ EXPECTED_MODES = {
     "Stop": {"stop"},
     "SessionEnd": {"session-end"},
 }
+HOOK_SHELL_COMMAND = re.compile(
+    r'^sh "\$CLAUDE_PLUGIN_ROOT/scripts/acgm-hook\.sh" '
+    r'(session-start|pretool-bash|pretool-write|posttool|posttool-failure|stop|session-end) '
+    r'"\$CLAUDE_PLUGIN_DATA"$'
+)
 EXECUTABLES = {
     "bin/acgm",
     "scripts/acgm-hook.sh",
@@ -43,6 +48,7 @@ EXECUTABLES = {
     "scripts/governance-init.sh",
     "scripts/grounding-inject.sh",
     "scripts/post-tool-truth-first.sh",
+    "scripts/preflight.py",
     "scripts/pretool-destructive-bash.sh",
     "scripts/release_check.py",
 }
@@ -129,11 +135,11 @@ def hook_modes(groups: Any) -> set[str]:
             if not isinstance(handler, dict):
                 continue
             command = str(handler.get("command") or "")
-            args = handler.get("args", [])
             if "acgm-hook.sh" not in command:
                 continue
-            if isinstance(args, list) and args and isinstance(args[0], str):
-                modes.add(args[0])
+            match = HOOK_SHELL_COMMAND.fullmatch(command)
+            if match:
+                modes.add(match.group(1))
     return modes
 
 
@@ -168,9 +174,15 @@ def check_hooks(root: Path, results: Results) -> None:
             for handler in group.get("hooks", []) if isinstance(group, dict) else []:
                 if not isinstance(handler, dict) or "acgm-hook.sh" not in str(handler.get("command") or ""):
                     continue
-                args = handler.get("args", [])
-                if not isinstance(args, list) or len(args) < 2 or args[1] != "${CLAUDE_PLUGIN_DATA}":
-                    results.error(f"hook_plugin_data_missing:{event}")
+                command = str(handler.get("command") or "")
+                if "args" in handler:
+                    results.error(f"hook_exec_form_forbidden:{event}")
+                if "shell" in handler:
+                    results.error(f"hook_shell_override_forbidden:{event}")
+                if "${CLAUDE_PLUGIN_" in command:
+                    results.error(f"hook_placeholder_interpolation_forbidden:{event}")
+                if not HOOK_SHELL_COMMAND.fullmatch(command):
+                    results.error(f"hook_shell_command_invalid:{event}")
     if not any(code.startswith(("hook_", "hooks_", "session_start_")) for code in results.errors):
         results.pass_("hook_inventory")
 
@@ -181,10 +193,23 @@ def check_executable_modes(root: Path, results: Results) -> None:
         if not path.is_file():
             results.error(f"executable_missing:{relative}")
             continue
-        if not stat.S_IMODE(path.stat().st_mode) & 0o111:
+        if os.name != "nt" and not stat.S_IMODE(path.stat().st_mode) & 0o111:
             results.error(f"not_executable:{relative}")
     if not any(code.startswith(("executable_missing:", "not_executable:")) for code in results.errors):
         results.pass_("executable_modes")
+
+
+def check_line_endings_contract(root: Path, results: Results) -> None:
+    path = root / ".gitattributes"
+    try:
+        lines = {line.strip() for line in path.read_text(encoding="utf-8").splitlines()}
+    except OSError:
+        results.error("gitattributes_missing")
+        return
+    if "* text=auto eol=lf" not in lines:
+        results.error("gitattributes_lf_contract_missing")
+        return
+    results.pass_("line_endings_contract")
 
 
 def git_output(root: Path, *args: str) -> str | None:
@@ -298,6 +323,7 @@ def run_checks(
     version = check_versions(root, results)
     check_hooks(root, results)
     check_executable_modes(root, results)
+    check_line_endings_contract(root, results)
     check_release_paths(root, results)
     if not skip_bilingual:
         check_bilingual_contract(root, results)

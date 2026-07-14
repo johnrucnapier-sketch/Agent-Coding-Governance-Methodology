@@ -55,6 +55,8 @@ class RuntimeTestCase(unittest.TestCase):
         self.environment.start()
         for key in ("CLAUDE_PLUGIN_DATA", "CLAUDE_PROJECT_DIR", "XDG_DATA_HOME"):
             os.environ.pop(key, None)
+        for key in ("CLAUDE_CODE_GIT_BASH_PATH", "CLAUDE_CODE_USE_POWERSHELL_TOOL"):
+            os.environ.pop(key, None)
         self.store = acgm.Store(self.data_dir)
 
     def tearDown(self) -> None:
@@ -220,6 +222,104 @@ class ProjectAndSessionTests(RuntimeTestCase):
 
         self.assertLessEqual(len(items), 500)
         self.assertIn("ACGM-VERIFY-AFTER:", acgm.assistant_text(items))
+
+
+class ScaffoldAndPlatformTests(RuntimeTestCase):
+    def test_python_scaffold_is_idempotent_and_never_overwrites(self) -> None:
+        root = self.make_git_project()
+        existing = root / "CLAUDE.md"
+        existing.write_text("human-owned fixture\n", encoding="utf-8")
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            first = acgm.scaffold_project(root)
+            first_bytes = {name: (root / name).read_bytes() for name in ("CONSTITUTION.md", "AGENTS.md", "CLAUDE.md")}
+            second = acgm.scaffold_project(root)
+
+        self.assertEqual(first, (2, 1))
+        self.assertEqual(second, (0, 3))
+        self.assertEqual(existing.read_text(encoding="utf-8"), "human-owned fixture\n")
+        self.assertEqual(
+            first_bytes,
+            {name: (root / name).read_bytes() for name in ("CONSTITUTION.md", "AGENTS.md", "CLAUDE.md")},
+        )
+
+    def test_python_and_posix_fallback_scaffolds_match(self) -> None:
+        python_target = self.base / "python scaffold"
+        shell_target = self.base / "shell scaffold"
+        python_target.mkdir()
+        shell_target.mkdir()
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            acgm.scaffold_project(python_target)
+        subprocess.run(
+            ["sh", str(REPO_ROOT / "scripts" / "governance-init.sh"), str(shell_target)],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        for name in ("CONSTITUTION.md", "AGENTS.md", "CLAUDE.md"):
+            with self.subTest(name=name):
+                self.assertEqual((python_target / name).read_bytes(), (shell_target / name).read_bytes())
+
+    def test_interrupted_exclusive_create_removes_only_its_partial_file(self) -> None:
+        partial = self.base / "partial.txt"
+        original_write = os.write
+        call_count = 0
+
+        def fail_after_prefix(descriptor, content):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return original_write(descriptor, bytes(content[:1]))
+            raise OSError("fixture interruption")
+
+        with mock.patch.object(acgm.os, "write", side_effect=fail_after_prefix):
+            with self.assertRaises(OSError):
+                acgm.create_file_exclusive(partial, b"fixture content")
+        self.assertFalse(partial.exists())
+
+        existing = self.base / "existing.txt"
+        existing.write_bytes(b"human owned")
+        self.assertFalse(acgm.create_file_exclusive(existing, b"replacement"))
+        self.assertEqual(existing.read_bytes(), b"human owned")
+
+    @unittest.skipIf(os.name == "nt", "POSIX permission error contract")
+    def test_posix_fchmod_failure_is_not_silenced(self) -> None:
+        descriptor = os.open(self.base / "permission.txt", os.O_CREAT | os.O_WRONLY, 0o600)
+        try:
+            with mock.patch.object(acgm.os, "fchmod", side_effect=OSError("fixture")):
+                with self.assertRaises(OSError):
+                    acgm.restrict_descriptor(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def test_git_bash_path_and_powershell_setting_can_come_from_claude_settings(self) -> None:
+        git_bash = self.base / "Git" / "bin" / "bash.exe"
+        git_bash.parent.mkdir(parents=True)
+        git_bash.write_bytes(b"fixture")
+        self.config_dir.mkdir(parents=True)
+        (self.config_dir / "settings.json").write_text(
+            json.dumps(
+                {
+                    "env": {
+                        "CLAUDE_CODE_GIT_BASH_PATH": str(git_bash),
+                        "CLAUDE_CODE_USE_POWERSHELL_TOOL": "0",
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertEqual(acgm.effective_claude_env("CLAUDE_CODE_USE_POWERSHELL_TOOL"), "0")
+        self.assertEqual(acgm.windows_git_bash_status(), (True, "configured_path"))
+
+    def test_package_integrity_uses_running_python_not_python3_command_name(self) -> None:
+        with mock.patch.object(acgm.shutil, "which", return_value=None):
+            errors, _ = acgm.package_integrity()
+        self.assertNotIn("python3_missing", errors)
+        self.assertNotIn("python_too_old", errors)
 
 
 class BashGateTests(RuntimeTestCase):
@@ -543,7 +643,8 @@ class WriteAndLedgerTests(RuntimeTestCase):
         ):
             self.assertNotIn(forbidden, ledger)
         mode = stat.S_IMODE((self.data_dir / "events.jsonl").stat().st_mode)
-        self.assertEqual(mode, 0o600)
+        if os.name != "nt":
+            self.assertEqual(mode, 0o600)
 
     def test_ledger_rejects_path_like_enum_values(self) -> None:
         with self.assertRaises(ValueError):
