@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "agent-coding-governance-methodology": {
+      "source": {
+        "source": "github",
+        "repo": "johnrucnapier-sketch/Agent-Coding-Governance-Methodology",
+        "ref": "v0.3.0-rc.4"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "agent-coding-governance-methodology@agent-coding-governance-methodology": true
+  }
+}

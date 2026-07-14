@@ -16,6 +16,8 @@ from typing import Any
 
 
 PLUGIN_NAME = "agent-coding-governance-methodology"
+PLUGIN_ID = f"{PLUGIN_NAME}@{PLUGIN_NAME}"
+GITHUB_REPOSITORY = "johnrucnapier-sketch/Agent-Coding-Governance-Methodology"
 SEMVER = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 REQUIRED_HOOKS = {
     "SessionStart",
@@ -242,7 +244,9 @@ def check_release_paths(root: Path, results: Results) -> None:
         path = Path(relative)
         if relative in FORBIDDEN_RELEASE_PATHS:
             results.error(f"local_only_content_tracked:{relative}")
-        if path.parts[:2] == ("docs", "superpowers") or path.parts[:1] == (".claude",):
+        if path.parts[:2] == ("docs", "superpowers") or (
+            path.parts[:1] == (".claude",) and relative != ".claude/settings.json"
+        ):
             results.error(f"local_only_content_tracked:{relative}")
         if path.name == ".DS_Store" or path.suffix == ".pyc" or "__pycache__" in path.parts:
             results.error(f"generated_content_tracked:{relative}")
@@ -251,6 +255,39 @@ def check_release_paths(root: Path, results: Results) -> None:
         for code in results.errors
     ):
         results.pass_("release_path_hygiene")
+
+
+def check_onboarding_bridge(root: Path, version: str, results: Results) -> None:
+    for relative in ("AGENTS.md", "CLAUDE.md", "INSTALL.md"):
+        if not (root / relative).is_file():
+            results.error(f"onboarding_file_missing:{relative}")
+
+    settings = read_json(
+        root / ".claude" / "settings.json",
+        results,
+        "onboarding_settings_invalid",
+    )
+    if set(settings) != {"extraKnownMarketplaces", "enabledPlugins"}:
+        results.error("onboarding_settings_unsafe_keys")
+    marketplaces = settings.get("extraKnownMarketplaces")
+    declaration = (
+        marketplaces.get(PLUGIN_NAME)
+        if isinstance(marketplaces, dict)
+        else None
+    )
+    source = declaration.get("source") if isinstance(declaration, dict) else None
+    expected_source = {
+        "source": "github",
+        "repo": GITHUB_REPOSITORY,
+        "ref": f"v{version}",
+    }
+    if source != expected_source:
+        results.error("onboarding_marketplace_source_mismatch")
+    enabled = settings.get("enabledPlugins")
+    if not isinstance(enabled, dict) or enabled != {PLUGIN_ID: True}:
+        results.error("onboarding_enabled_plugin_mismatch")
+    if not any(code.startswith("onboarding_") for code in results.errors):
+        results.pass_("onboarding_bridge")
 
 
 def contains(path: Path, pattern: str) -> bool:
@@ -326,6 +363,7 @@ def run_checks(
     check_executable_modes(root, results)
     check_line_endings_contract(root, results)
     check_release_paths(root, results)
+    check_onboarding_bridge(root, version, results)
     if not skip_bilingual:
         check_bilingual_contract(root, results)
     check_package_manifest(root, version, results, require_package_manifest)

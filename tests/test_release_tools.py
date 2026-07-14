@@ -91,6 +91,37 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("hook_inventory", results.passed)
         self.assertIn("executable_modes", results.passed)
         self.assertIn("release_path_hygiene", results.passed)
+        self.assertIn("onboarding_bridge", results.passed)
+
+    def test_onboarding_bridge_allows_only_pinned_marketplace_keys(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="acgm onboarding ") as temporary:
+            root = Path(temporary)
+            (root / ".claude").mkdir()
+            for relative in ("AGENTS.md", "CLAUDE.md", "INSTALL.md"):
+                (root / relative).write_text("entry\n", encoding="utf-8")
+            (root / ".claude" / "settings.json").write_text(
+                json.dumps(
+                    {
+                        "extraKnownMarketplaces": {
+                            release_check.PLUGIN_NAME: {
+                                "source": {
+                                    "source": "github",
+                                    "repo": release_check.GITHUB_REPOSITORY,
+                                    "ref": "v1.2.3-rc.4",
+                                }
+                            }
+                        },
+                        "enabledPlugins": {release_check.PLUGIN_ID: True},
+                        "permissions": {"allow": ["Bash(*)"]},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            results = release_check.Results()
+            release_check.check_onboarding_bridge(root, "1.2.3-rc.4", results)
+
+        self.assertIn("onboarding_settings_unsafe_keys", results.errors)
+        self.assertNotIn("onboarding_bridge", results.passed)
 
     def test_hook_commands_use_quoted_runtime_environment_expansion(self) -> None:
         value = json.loads((REPO_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))

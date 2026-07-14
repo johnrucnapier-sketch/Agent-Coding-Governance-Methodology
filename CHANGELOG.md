@@ -3,6 +3,68 @@
 All notable ACGM changes are recorded here. The plugin ID remains
 `agent-coding-governance-methodology@agent-coding-governance-methodology`.
 
+## [0.3.0-rc.4] — 2026-07-14 (prerelease candidate)
+
+RC4 repairs the first-use and proof-boundary gaps exposed by a real Desktop/third-party
+endpoint installation attempt. It remains a test candidate, not a stable release, and
+does not claim that every Claude surface or provider route has passed E2E.
+
+### Added
+
+- A surface-aware, schema-v2 preflight that distinguishes automated Claude Code CLI,
+  Desktop Code Local/SSH UI, unknown, advisory-only Chat, experimental Cowork, and
+  unsupported Code Cloud/WSL routes using observable capabilities only.
+- Fail-closed surface conflict handling: an explicit target cannot override official
+  Cloud or OS-level WSL runtime evidence and unlock an installer mutation.
+- Tagged Git checkout is the only automated-installer source; GitHub source archives
+  and release tarballs are labeled audit-only because they lack Git revision/index proof.
+- The repository-plugin consent contract is version-gated at Claude Code `2.1.195+`;
+  an older or unreadable CLI version cannot enter the automated mutation route.
+- Thin `AGENTS.md`, `CLAUDE.md`, and bilingual `INSTALL.md` entrypoints, plus an official
+  project-level marketplace declaration that keeps Claude's trust/install prompts.
+- Doctor reports a current-version SessionStart health event only as retained historical
+  corroboration, never as sufficient proof of live activation or target-surface identity.
+- An explicitly authorized `--upgrade-verified-snapshot` transaction for one unique,
+  enabled, user-scope, byte-verified older ACGM snapshot. It requires a strictly newer
+  target, blocks an active `.in_use` cache, proves scoped removal and
+  `uninstall --keep-data`, privately backs up/verifies the Event Ledger, verifies the
+  replacement, and rolls back a known failure.
+- A read-only legacy-public-install diagnosis and explicit human migration plan for the
+  known `0.1.0` / `v0.3.0-rc.1` GitHub shape. Repository/ref/version/scope remain routing
+  clues and are never elevated into publisher-authenticity or installed-byte proof.
+
+### Changed
+
+- Installation results now separate `SOURCE_VERIFIED`, `CONFIGURATION_VERIFIED`,
+  runtime activation, and project governance. A verified install record/cache no longer
+  reports the plugin as ready before reload and hook evidence.
+- `claude --version` alone is no longer sufficient: the automated route also checks the
+  official plugin-management subcommands before allowing an install plan.
+- Missing standalone CLI becomes a Desktop Code UI plan when that surface is selected
+  or observed, instead of being misreported as universal Desktop incompatibility.
+- An explicit Desktop Local/SSH target remains on its UI/trust route even when a CLI is
+  installed; cross-surface configuration is not accepted as Desktop activation.
+- Ambiguous in-Claude `auto` detection now asks for the exact target surface instead of
+  silently treating a Desktop task with a CLI binary as a CLI installation.
+- Claude CLI capability/state probes and mutations use a fresh private neutral cwd, so
+  this repository's project-scoped onboarding declaration cannot contaminate user-scope
+  inspection or collide with the verified local snapshot.
+- Installer dry-runs may execute read-only Claude version/help/list probes but never a
+  mutation. Default conflicts remain fail-closed; the upgrade flag cannot absorb
+  duplicate, project/local-scope, unknown-source, or legacy public-GitHub installs.
+- Upgrade results distinguish verified success, verified rollback, and partial state
+  requiring manual repair. Private backup locations are never reported; successful
+  upgrades and verified rollbacks clean their temporary backup after data verification.
+  If cleanup fails, `retained_backup_verified` distinguishes a reverified complete
+  residual backup from a partial, unverified artifact before any recovery claim.
+
+### Boundaries
+
+- ACGM never infers the model/provider behind a gateway or host-managed route.
+- Desktop Chat remains skill-only; Cowork command hooks require dedicated E2E; Code
+  Cloud/WSL do not count as full-plugin support.
+- Native PowerShell and controlled-Windows real-machine E2E remain release gates.
+
 ## [0.3.0-rc.3] — Unreleased
 
 Unreleased testing candidate. RC3 has a new version identity because Claude Code uses
@@ -159,6 +221,7 @@ Release candidate. This version is not stable until the real-Claude-Code checkli
 - Initial SessionStart injection, generic scaffold, and later v2-era hook experiments
   published without a corresponding package-version increment.
 
+[0.3.0-rc.4]: https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology/compare/v0.3.0-rc.1...v0.3.0-rc.4
 [0.3.0-rc.3]: https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology/compare/v0.3.0-rc.1...HEAD
 [0.3.0-rc.2]: https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology/compare/v0.3.0-rc.1...HEAD
 [0.3.0-rc.1]: https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology/compare/50a642776e361be89fc24640c10a9f9fd742d8f0...v0.3.0-rc.1
@@ -170,6 +233,62 @@ Release candidate. This version is not stable until the real-Claude-Code checkli
 
 ACGM 的重要变更记录在这里。插件 ID 始终保持
 `agent-coding-governance-methodology@agent-coding-governance-methodology`。
+
+## [0.3.0-rc.4] — 2026-07-14（预发布候选）
+
+RC4 修复一次真实 Desktop / 第三方兼容端点安装尝试暴露出的首次启用和证据边界缺口。
+它仍是测试候选版，不是稳定版，也不声称所有 Claude surface 或 provider 路径已经通过
+真机 E2E。
+
+### 新增
+
+- Schema v2 的 surface-aware preflight：只按可观察能力区分 Claude Code CLI 自动路径、
+  Desktop Code Local/SSH UI 路径、未知路径、Chat 仅建议路径、Cowork 实验路径，以及
+  不支持的 Code Cloud/WSL。
+- Surface 冲突失败关闭：显式目标不能覆盖官方 Cloud 或 OS 级 WSL 运行时证据并解锁安装变更。
+- 自动安装器只接受固定 tag 的 Git checkout；GitHub 源码压缩包和 release tarball 因缺少
+  Git revision/index 证据而明确标为仅供审计。
+- Repository-plugin 同意契约以 Claude Code `2.1.195+` 为门槛；旧版或不可读的 CLI
+  版本不能进入自动变更路径。
+- 薄 `AGENTS.md`、`CLAUDE.md`、双语 `INSTALL.md` 入口，以及保留 Claude 信任/安装提示的
+  官方 project-scope marketplace 声明。
+- Doctor 仅把当前版本 SessionStart health 事件作为保留的历史旁证；它永远不足以证明
+  实时激活或目标 surface 身份。
+- 新增由用户另行明确授权的 `--upgrade-verified-snapshot` 事务，只处理唯一、启用、
+  user-scope、字节核验过的旧 ACGM snapshot。它要求目标版本严格更高，阻断仍有
+  `.in_use` 的 cache，证明带 scope 的移除与 `uninstall --keep-data`，私下备份并核验
+  Event Ledger，核验替换，并在状态明确的失败上回滚。
+- 对已知 `0.1.0` / `v0.3.0-rc.1` GitHub 形态提供只读旧公开安装诊断与明确人工迁移
+  计划；repository/ref/version/scope 始终只是路由线索，不会被提升为发布者真实性或
+  安装字节证明。
+
+### 变更
+
+- 安装结果拆分为 `SOURCE_VERIFIED`、`CONFIGURATION_VERIFIED`、运行时激活和项目治理；
+  配置记录与缓存字节通过后，不再在 reload 与 hook 证据缺失时宣称可用。
+- `claude --version` 不再足够；自动路径还必须验证官方 plugin-management 子命令。
+- 已选择或已观察到 Desktop Code surface 时，缺少独立 CLI 会得到 UI 安装计划，不再被
+  错报成整个 Desktop 都不兼容。
+- 显式 Desktop Local/SSH 即使同机存在 CLI，也保持 UI/trust 路径；跨 surface 配置不能
+  充当 Desktop 激活证据。
+- Claude 内部的 `auto` 若无法区分 CLI 与 Desktop，会要求准确 surface，不再因存在 CLI
+  binary 而静默把 Desktop 任务当作 CLI 安装。
+- Claude CLI 能力/状态 probe 与 mutation 使用全新私有 neutral cwd，避免本仓 project-scope
+  onboarding 声明污染 user-scope 检查或与验证过的本地 snapshot 冲突。
+- Installer dry-run 可以执行 Claude 的只读 version/help/list probe，但绝不 mutation。
+  默认冲突继续失败关闭；升级 flag 不能吸收重复、project/local scope、未知来源或旧公开
+  GitHub 安装。
+- 升级结果区分核验成功、核验回滚与需要人工修复的部分状态；绝不报告私有 backup 路径，
+  成功升级与核验回滚会在数据核验后清理临时 backup。
+  cleanup 失败时，`retained_backup_verified` 会区分重新核验过的完整残留 backup 与部分、
+  未验证 artifact，不能在重验前宣称可恢复。
+
+### 边界
+
+- ACGM 不推断 gateway 或 host-managed 路径背后的真实模型/provider。
+- Desktop Chat 仍仅支持 skills；Cowork command hooks 必须独立 E2E；Code Cloud/WSL
+  不计为完整插件支持。
+- Native PowerShell 与受控 Windows 真机 E2E 仍是发布门槛。
 
 ## [0.3.0-rc.3] — 尚未发布
 

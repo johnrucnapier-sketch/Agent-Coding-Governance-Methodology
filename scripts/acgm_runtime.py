@@ -1609,17 +1609,212 @@ def hook_session_end(data: dict[str, Any], store: Store) -> None:
     json_print({})
 
 
-def installed_plugin_record() -> dict[str, Any] | None:
+def installed_plugin_records() -> tuple[list[dict[str, Any]], str | None]:
+    """Return every registered ACGM install record without choosing a winner.
+
+    Multiple scope records are an ambiguous installation state.  Doctor must not
+    silently select the last one and then use a retained ledger event as activation
+    evidence.
+    """
+
     config_root = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))).expanduser()
     path = config_root / "plugins" / "installed_plugins.json"
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-        records = value.get("plugins", {}).get(PLUGIN_ID, [])
-        if isinstance(records, list) and records:
-            return records[-1] if isinstance(records[-1], dict) else None
+    except FileNotFoundError:
+        return [], None
     except (OSError, json.JSONDecodeError):
-        return None
-    return None
+        return [], "installed_plugin_registry_unreadable"
+    if not isinstance(value, dict):
+        return [], "installed_plugin_registry_invalid"
+    plugins = value.get("plugins")
+    if not isinstance(plugins, dict):
+        return [], "installed_plugin_registry_invalid"
+    records = plugins.get(PLUGIN_ID, [])
+    if not isinstance(records, list) or not all(
+        isinstance(record, dict) for record in records
+    ):
+        return [], "installed_plugin_records_invalid"
+    return [dict(record) for record in records], None
+
+
+def installed_plugin_record() -> dict[str, Any] | None:
+    """Return the sole install record, or ``None`` for absent/ambiguous state."""
+
+    records, error = installed_plugin_records()
+    return records[0] if error is None and len(records) == 1 else None
+
+
+def running_from_source_checkout() -> bool:
+    """Return whether this runtime is executing from a Git working tree."""
+
+    return (PLUGIN_ROOT / ".git").exists()
+
+
+def registered_install_matches_running_source(record: dict[str, Any] | None) -> bool:
+    """Compare the registered install root without exposing it in diagnostics."""
+
+    if not record:
+        return False
+    raw_path = record.get("installPath")
+    if not isinstance(raw_path, str) or not raw_path:
+        return False
+    try:
+        return Path(raw_path).expanduser().resolve(strict=True) == PLUGIN_ROOT.resolve(
+            strict=True
+        )
+    except OSError:
+        return False
+
+
+def plugin_enabled_declaration(project_root: Path) -> tuple[bool, str | None]:
+    """Resolve the explicit ACGM enable declaration for this project.
+
+    Installed-plugin records do not contain the current enable flag.  Read the
+    documented user, project, and project-local settings layers in increasing
+    precedence and fail closed on malformed values.  This proves only a settings
+    declaration, not that a live Claude surface loaded the plugin.
+    """
+
+    config_root = Path(
+        os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))
+    ).expanduser()
+    settings_paths = (
+        config_root / "settings.json",
+        project_root / ".claude" / "settings.json",
+        project_root / ".claude" / "settings.local.json",
+    )
+    enabled: bool | None = None
+    for path in settings_paths:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
+        except (OSError, json.JSONDecodeError):
+            return False, "plugin_enable_settings_unreadable"
+        if not isinstance(payload, dict):
+            return False, "plugin_enable_settings_invalid"
+        declarations = payload.get("enabledPlugins")
+        if declarations is None:
+            continue
+        if not isinstance(declarations, dict):
+            return False, "plugin_enable_settings_invalid"
+        if PLUGIN_ID not in declarations:
+            continue
+        value = declarations[PLUGIN_ID]
+        if not isinstance(value, bool):
+            return False, "plugin_enable_declaration_invalid"
+        enabled = value
+    if enabled is not True:
+        return False, "plugin_not_explicitly_enabled_for_project"
+    return True, None
+
+
+def installation_registration_status(
+    records: list[dict[str, Any]],
+    *,
+    registry_error: str | None,
+    project_root: Path,
+) -> dict[str, Any]:
+    """Build fail-closed registration prerequisites for historical evidence."""
+
+    record = records[0] if len(records) == 1 else None
+    errors: list[str] = []
+    if registry_error:
+        errors.append(registry_error)
+    if len(records) > 1:
+        errors.append("multiple_installed_plugin_records")
+    if record is not None:
+        if record.get("scope") not in {"user", "project", "local"}:
+            errors.append("installed_plugin_scope_invalid")
+        if record.get("version") != ACGM_VERSION:
+            errors.append("installed_version_differs_from_running_source")
+        if record.get("errors") not in (None, False, "", [], {}):
+            errors.append("installed_plugin_reports_errors")
+        if not registered_install_matches_running_source(record):
+            errors.append("installed_plugin_path_differs_from_running_source")
+    enabled, enabled_error = plugin_enabled_declaration(project_root)
+    if enabled_error:
+        errors.append(enabled_error)
+    return {
+        "registered": bool(records),
+        "record_count": len(records),
+        "installed_version": record.get("version") if record else None,
+        "installed_commit": record.get("gitCommitSha") if record else None,
+        "running_version": ACGM_VERSION,
+        "source_mode": running_from_source_checkout(),
+        "running_source_matches_registered_install": bool(
+            record and registered_install_matches_running_source(record)
+        ),
+        "explicitly_enabled_for_project": enabled,
+        "registration_consistent": bool(record) and not errors,
+        "error_codes": sorted(set(errors)),
+    }
+
+
+def session_start_activation_evidence(
+    store: Store,
+    *,
+    project_id: str,
+    installation: dict[str, Any],
+    storage_errors: list[str],
+) -> dict[str, Any]:
+    """Report narrowly scoped evidence that SessionStart ran for this version.
+
+    A health ledger record proves only that the current ACGM version's
+    ``SessionStart`` hook wrote that record. It does not prove that any other
+    hook event, Claude surface, or project-governance state is working.
+    """
+
+    evidence = {
+        "status": "CURRENT_VERSION_SESSION_START_NOT_OBSERVED",
+        "evidence_scope": "historical_session_start_health_event_only",
+        "current_version_session_start_observed": False,
+        "current_project_session_start_observed": False,
+        "historical_observation_only": True,
+        "sufficient_for_active_verified": False,
+        "latest_observed_at": None,
+        "current_project_observed_at": None,
+    }
+    if storage_errors:
+        evidence["status"] = "EVIDENCE_UNAVAILABLE"
+        return evidence
+    if installation.get("source_mode"):
+        evidence["status"] = "SOURCE_CHECKOUT_NOT_RUNTIME_PROOF"
+        return evidence
+    if not installation.get("registration_consistent"):
+        evidence["status"] = "CURRENT_INSTALLATION_NOT_CONFIRMED"
+        return evidence
+
+    installed_version = installation.get("installed_version")
+    matching_events: list[dict[str, Any]] = []
+    for event in store.events():
+        if (
+            event.get("acgm_version") == installed_version
+            and event.get("event_type") == "health"
+            and event.get("initiator") == "acgm_hook"
+            and event.get("phase") == "session_start"
+            and event.get("rule_id") == "runtime.health"
+            and event.get("action") == "checked"
+            and event.get("outcome") == "visible"
+            and isinstance(event.get("timestamp"), str)
+            and bool(event.get("timestamp"))
+        ):
+            matching_events.append(event)
+
+    if not matching_events:
+        return evidence
+
+    evidence["status"] = "HISTORICAL_CURRENT_VERSION_SESSION_START_OBSERVED"
+    evidence["current_version_session_start_observed"] = True
+    evidence["latest_observed_at"] = matching_events[-1]["timestamp"]
+    project_events = [
+        event for event in matching_events if event.get("project_id") == project_id
+    ]
+    if project_events:
+        evidence["current_project_session_start_observed"] = True
+        evidence["current_project_observed_at"] = project_events[-1]["timestamp"]
+    return evidence
 
 
 def continuity_status() -> dict[str, Any]:
@@ -1671,17 +1866,20 @@ def doctor_report(project: str | None, update: bool = True) -> dict[str, Any]:
     storage_errors, storage_warnings = store_integrity(store)
     errors.extend(storage_errors)
     warnings.extend(storage_warnings)
-    record = installed_plugin_record()
-    install = {
-        "registered": bool(record),
-        "installed_version": record.get("version") if record else None,
-        "installed_commit": record.get("gitCommitSha") if record else None,
-        "running_version": ACGM_VERSION,
-        "source_mode": (PLUGIN_ROOT / ".git").exists(),
-    }
-    if record and record.get("version") != ACGM_VERSION:
-        warnings.append("installed_version_differs_from_running_source")
+    records, registry_error = installed_plugin_records()
+    install = installation_registration_status(
+        records,
+        registry_error=registry_error,
+        project_root=root,
+    )
+    warnings.extend(install["error_codes"])
     ledger_writable = not storage_errors
+    activation = session_start_activation_evidence(
+        store,
+        project_id=project_id,
+        installation=install,
+        storage_errors=storage_errors,
+    )
     return {
         "acgm_version": ACGM_VERSION,
         "project_id": project_id,
@@ -1694,6 +1892,7 @@ def doctor_report(project: str | None, update: bool = True) -> dict[str, Any]:
             "ledger_writable": ledger_writable,
             "python": sys.version.split()[0],
         },
+        "activation": activation,
         "components": components,
         "continuity": continuity_status(),
     }
@@ -1715,6 +1914,12 @@ def command_doctor(args: argparse.Namespace) -> int:
             "Plugin: "
             + (f"registered {install['installed_version']}" if install["registered"] else "not registered in installed_plugins.json")
             + f"; running {install['running_version']}"
+        )
+        activation = report["activation"]
+        print(
+            "Activation: "
+            f"{activation['status']} "
+            "(historical SessionStart health event only; never sufficient by itself for ACTIVE_VERIFIED)"
         )
         runtime = report["runtime"]
         print(f"Runtime: {'HEALTHY' if runtime['healthy'] else 'BROKEN'}  Ledger: {'writable' if runtime['ledger_writable'] else 'unwritable'}")
