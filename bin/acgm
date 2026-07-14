@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PLUGIN_ROOT=$(CDPATH= cd -- "$SELF_DIR/.." && pwd)
+
+if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+  echo "ACGM requires Python 3.10+ for doctor, reports, and local event storage." >&2
+  echo "ACGM 需要 Python 3.10+ 才能运行 doctor、报告与本地事件记录。" >&2
+  exit 2
+fi
+
+exec python3 "$PLUGIN_ROOT/scripts/acgm_runtime.py" "$@"

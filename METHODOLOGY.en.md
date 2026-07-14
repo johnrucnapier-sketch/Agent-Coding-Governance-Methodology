@@ -217,52 +217,57 @@ same conversational block in this session, a corresponding tool call (grep / cat
 systemctl list-units / ls etc.) preceding it, and that tool call's output
 **contains the referenced fact**, is it substance-compliant.
 
-### Principle Three · corollary: operational truth (identifiers in commands share the same evidence standard)
+### Principle Three · operationalization: the high-risk evidence gate
 
-> **Advisory clause · single direct event of support** — per CONTRIBUTING's
-> 2-independent-evidence rule, grace period ≤ 30 days; promoted to main clause
-> after a second independent event, or downgraded to Meta-observations otherwise.
+> **Evidence maturity: Corroborated.** See [`EVIDENCE.md`](EVIDENCE.md) for the
+> evidence index and limitations.
 
-Writing "uses X" in a doc requires `file:line`; writing `systemctl stop X` in a
-command has had no comparable constraint. This is truth-first's blind spot on the
-**operational plane**.
+Truth-first governs operations as well as prose. Before any destructive,
+irreversible, or runtime-state-changing high-risk action, complete an
+**action-level evidence gate**:
 
-Identifiers in commands (unit names, file paths, service IDs, PIDs, containers,
-hosts) and references in docs share the **same evidence standard**. Before any
-destructive / state-changing operation, every identifier in the command must have
-a **right-now-pointable source** — pointing to a specific line N of a
-`systemctl list-units` output in this session, an `ls` listing, or a `cat config`
-field — **no reuse of session-internal aliases or impressions**.
+1. **What is the target?** Unit names, file paths, service IDs, PIDs, containers,
+   hosts, and other identifiers must come from a source read now in this session;
+   a summary, stale handoff, or session-internal alias is not a canonical name.
+2. **What is its current state?** Read target state, resource use, file mtime,
+   processes, and the current Git root/worktree/branch/track. If the main worktree
+   is not on the trunk, stop.
+3. **What may change?** State the authorization boundary, blast radius, and
+   rollback. Ambiguity or authority expansion means stop and ask.
+4. **How will intent be proven?** Before acting, state the observable postcondition
+   and the verification method. Exit code alone is not verification.
 
-> **Failure mode:** the agent treats a one-off alias (e.g., "the 27B", "the main
-> model", "the cache dir") established in some prior turn as the canonical
-> identifier and issues a command on that basis. The real identifier is 10 seconds
-> away via `list-units`, but not querying it = ② on the operational plane.
+This does not mechanically replay the entire session-grounding ritual. It
+re-grounds the **target, state, boundary, and verification** at the point of risk.
+The mechanism layer can validate only the mechanically checkable subset; filling
+out a four-part template is not evidence that the gate passed.
 
-### Principle Three · corollary: async / post-action self-monitoring (the starter owns the verification)
+> **Failure mode:** the agent treats a one-off alias as a real identifier and
+> issues a command, or declares success because the command returned zero. The
+> first is ② on the operational plane; the second omits postcondition verification.
 
-> **Advisory clause · single direct event of support** — same 2-independent-evidence rule.
+### Principle Three · operationalization: post-action verification obligation
 
-Truth-first cares about the source of a *conclusion*; grounding cares about the
-*state* before action; **neither speaks to what happens after**.
+> **Evidence maturity: Corroborated.** See [`EVIDENCE.md`](EVIDENCE.md).
 
-Any **background process / long-running task / state-changing operation** you
-start, **its completion or failure verification is owned by you**, until that
-state is explicitly verified.
+For every **background process, long-running task, or state-changing operation**
+you start, the verification obligation persists from `started` until `verified`:
 
-- "Started" ≠ "running": after `systemctl start X`, check `is-active` + resource
-  use — **not just exit code**.
-- "Exit 0" ≠ "intent achieved": after a destructive op, check whether the right
-  target was hit and the intended effect occurred.
-- Background tasks must register: **when to check back, and with what command for
-  liveness / progress**; if it involves an auto-restart loop, explicitly declare
-  the monitoring interval.
+- "Started" ≠ "running": read liveness, resource, and error state after startup,
+  not just the launch command's exit code.
+- "Exit 0" ≠ "intent achieved": verify that the intended target changed and the
+  intended effect occurred.
+- For asynchronous work that cannot finish in the current turn, record the next
+  check's condition and method. If the runtime cannot wake the agent later, leave
+  an honest `pending verification`; do not write a future promise as completed.
+- Only a postcondition actually read and passed may move an event to `verified`
+  and count as a governance outcome.
 
-**Three-layer placement:** this is a normative-layer clause. The mechanism layer
-(PreToolUse hook) can do "promise on record" — the agent declares at the moment
-"I will run X to verify after execution"; **whether the agent actually goes back
-hours later is closed by the audit layer.** This shape — "mechanism partially
-covers, the norm fully declares" — is the model case of the Stance section.
+The mechanism layer records source-minimized lifecycle state and whether the exact
+declared check was observed to succeed; it does not copy raw commands, output, or
+paths into the Event Ledger. The audit layer reviews that medium-confidence record
+and closes future checks the runtime cannot perform automatically. This does not rely
+on the acting agent's sentence, "I will check later."
 
 ---
 
@@ -290,33 +295,13 @@ more than half of handoff cost.**
 > Key: **restate first, then act.** The deviation exposed at the restate stage is an
 > order of magnitude cheaper than the one found after the code is written.
 
-### Principle Four · corollary: grounding required before any destructive operation
+### Local re-grounding for a high-risk action
 
-> **Advisory clause · single direct event of support** — same 2-independent-evidence rule.
-
-The 5-step grounding ritual is not just for session start; **before every
-destructive / state-changing operation** it must also run, at minimum steps 1–3 of
-the five:
-
-1. **Read the relevant governance rules:** the red lines for this class of
-   operation (e.g., truth-first's operational-truth corollary, this repo's scope
-   boundary).
-2. **Identify worktree / branch / track:** the worktree and current branch this
-   operation is on (per **Principle Seven · corollary: worktree discipline**),
-   which track it lies in, what scope it affects. **If on the main worktree and
-   not on the trunk = Principle Seven · corollary anomaly; stop immediately, this
-   destructive operation must not run.**
-3. **Report the real current state:** `is-active` / GPU usage / existing processes
-   / file mtimes — **read them, do not work from impression**.
-
-"Destructive / state-changing" includes but is not limited to:
-`systemctl stop/start/disable/restart`, `rm -rf`, `git push --force` /
-`git reset --hard`, `drop/truncate/delete from`, `dd`, `mkfs`, `kill -9`,
-model load/unload, service start/stop.
-
-> Connection with §Principle Seven · corollary: worktree discipline says "the main
-> tree is always the trunk"; this corollary makes that claim re-verified **before
-> every destructive operation**, not just once at session start.
+The five-step session ritual establishes global direction. Before a high-risk
+action, do not recite all five steps again; return to Principle Three's **high-risk
+evidence gate** and re-read the action's target, current state, authorization
+boundary, and postcondition. Worktree discipline is re-verified here rather than
+only once at session start.
 
 ---
 
@@ -491,11 +476,11 @@ corresponding tool call (grep / cat / systemctl list-units / ls etc.) preceding
 it, whose output **contains the referenced fact**. Otherwise, even with a
 `file:line` field present, it remains form-compliance.
 
-**Current evidence status:** predicted. **The strong form of fakery (claiming to
-have run grep when none was run) has not been observed.** The weak form already
-seen (summary inheritance without re-verification) is covered by
-summaries-not-truth. Once a strong form is observed, by the 2-independent-evidence
-rule it is promoted to an independent §3 corollary.
+**Evidence maturity:** the weak form — summary inheritance without
+re-verification — is **Observed**. The strong form of fakery — claiming to have run
+grep when none was run — remains **Predictive**. They must not be written as the
+same observed fact; maturity changes are recorded in
+[`EVIDENCE.md`](EVIDENCE.md).
 
 ### Meta-observation 2: injection saturation
 
@@ -512,13 +497,54 @@ constraint on ACGM itself.
   (SessionStart and PreToolUse must not say the same thing).
 - **Whitelist hooks are preferred over blanket hooks** (PreToolUse only on
   destructive Bash, not on all Bash).
-- An intra-session trigger frequency above ~5 for the same hook = design smell,
-  needs review.
+- Trigger frequency, repetition, and ignore rate go into the Event Ledger first;
+  no arbitrary count threshold is set without observed data.
 
-**Current evidence status:** design-prevention principle. **A specific saturation
-event has not been observed.** This methodology's own hook design is already
-constrained by it (PreToolUse only matches destructive Bash; SessionStart only
-fires at session start / resume).
+**Evidence maturity: Predictive.** No attributable saturation event has yet been
+observed. This may constrain design and guide instrumentation, but cannot become a
+default blocking rule until it reaches a higher maturity.
+
+---
+
+## ACGM Event Ledger: record verifiable effects, not activity
+
+The Event Ledger is a local, append-only governance-event record — not a chat
+archive, project handoff, or telemetry upload. By default it records no prompt,
+source code, full command, secret, or identifying absolute path; any redacted
+export requires explicit user action.
+
+An event advances by outcome:
+
+```text
+detected → intervened → resolved → verified
+    ├── dismissed_false_positive
+    └── unresolved
+```
+
+Minimum attribution fields are:
+
+- **initiator:** hook / agent / user / external audit — who found it first;
+- **phase:** pre-action / post-action / audit — before or after the risky action;
+- **outcome:** blocked / corrected / allowed / unresolved — what actually happened;
+- **verification:** postcondition evidence and result, not "it is fixed";
+- **false positive:** whether it was a false alarm and why it was closed.
+
+Governance outcomes are derived from those fields, not promotional counts:
+
+- Hook startup, skill invocation, and principle citation are `activity`, **not a
+  win**.
+- `prevented` requires pre-action timing, an actual intervention, and verification
+  that the risk did not land.
+- A correction initiated by a user or external audit is an `assisted correction`,
+  not an autonomous agent catch.
+- A post-action repair becomes a `verified correction` only after its postcondition
+  passes.
+- False positives remain visible; they are not silently removed from the denominator.
+
+This state machine describes one governance event's outcome. It does not replace
+project installation/activation health, nor the claim maturity in `EVIDENCE.md`.
+Keeping all three separate prevents "the plugin started" from being rewritten as
+"governance worked."
 
 ---
 

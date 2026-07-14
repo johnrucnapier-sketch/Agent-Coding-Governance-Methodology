@@ -1,431 +1,601 @@
-# Agent Coding Governance
+# ACGM
 
-**A governance system for multi-session, long-horizon AI development — built and validated on Claude Code.**
+**Drift control for long-horizon agent coding.**
 
-[![Code: MIT](https://img.shields.io/badge/code-MIT-green.svg)](LICENSING.md) [![Docs: CC--BY--4.0](https://img.shields.io/badge/docs-CC--BY--4.0-blue.svg)](LICENSING.md) [![Dual-license](https://img.shields.io/badge/license-dual--track-lightgrey.svg)](LICENSING.md)
+Agent Coding Governance Methodology (ACGM) is a governance method and a Claude Code
+plugin for multi-session, long-running development. It makes recurring agent drift
+visible, interceptable, reversible, and locally auditable.
 
-> English first (full). 中文完整版在下半部分 — scroll past the English.
+[![Version: 0.3.0-rc.1](https://img.shields.io/badge/version-0.3.0--rc.1-orange.svg)](CHANGELOG.md)
+[![Code: MIT](https://img.shields.io/badge/code-MIT-green.svg)](LICENSING.md)
+[![Docs: CC--BY--4.0](https://img.shields.io/badge/docs-CC--BY--4.0-blue.svg)](LICENSING.md)
 
----
-
-> **One sentence:** long-horizon AI-driven development **rots structurally** — unless
-> there is governance.
+> **Release status:** `0.3.0-rc.1` is a release candidate, not a stable release.
+> Its local runtime and regression suite can be verified without a Claude account,
+> but it must pass the real-Claude-Code checklist in
+> [`tests/manual/CLAUDE_CODE_E2E.md`](tests/manual/CLAUDE_CODE_E2E.md) before promotion
+> to stable. Do not describe this RC as fully validated on current Claude Code yet.
 >
-> Distilled from a real project (a dozen-plus versions, dozens of sessions, ~2B
-> tokens of mistakes). What you get: an agent that takes fewer wrong turns, makes
-> fewer fabricated claims, and does fewer destructive actions across long timelines —
-> at the cost of it stopping to verify more. It ships as a Claude Code plugin
-> (runtime-automatic). A generic, plugin-free scaffold is also included for other
-> setups.
+> English is complete first. 中文完整版在后半部分。
 
-## What this is / why you need it
+## Why ACGM exists
 
-Doing **multi-session, long-horizon, possibly multi-person / multi-branch**
-development with Claude Code (or a comparable AI coding agent), past a certain scale
-you inevitably hit:
+Long-horizon agent development accumulates structural drift:
 
-- a new session doesn't know what happened before; it rebuilds from handoff docs →
-  necessarily distorted
-- the AI **fabricates technical conclusions** from conversation residue instead of
-  reading code ground truth
-- an old plan is overturned but unmarked; the next session reads it and goes wrong
-- governance/truth lives on a feature branch, the trunk rots, a new session on the
-  old trunk reads all-wrong
+- **Implementation drift:** the agent detours around a hard technical problem.
+- **Cognitive drift:** a summary, memory, or stale document is treated as current truth.
+- **Structural-placement drift:** governance or truth lives on the wrong branch or worktree.
+- **Scope drift:** content outside the software boundary enters the repository.
 
-**This is not operator error, it is the natural cost of this workflow.** This repo
-does not eliminate rot (impossible) — it makes rot **visible, interceptable,
-reversible.**
+ACGM does not claim to eliminate drift. It provides a normative method, targeted
+runtime mechanisms, and an audit trail so drift can be found earlier and handled
+explicitly. The full method is in [`METHODOLOGY.en.md`](METHODOLOGY.en.md); real,
+desensitized examples are in [`CASES.md`](CASES.md).
 
-## Core: the four drift types (the mental model most worth taking with you)
+[`EVIDENCE.md`](EVIDENCE.md) is the public claim-maturity register. It separates
+Observed, Reproduced, Corroborated, Predictive, and Rejected claims so an activity
+count or single incident cannot silently become a universal rule or a marketed win.
 
-First learn to **recognize which type it is**, then talk about how to fix it.
+## What V3 adds
 
-| Drift | What's wrong | Defense |
-|---|---|---|
-| **① Implementation** | detours when the tech is hard (hand-rolled polyfill / downgrade / silent error swallow) | Detour ban: root-cause first |
-| **② Cognitive** | writes docs from impression, doesn't verify | Truth-first: conclusions carry `file:line`, ban "I recall / should be" |
-| **③ Structural placement** | governance on the wrong branch, trunk rots | govern only on the trunk; trunk never allowed to rot |
-| **④ Scope** | content that shouldn't be in the repo (ops/strategy) creeps in | scope boundary: for software to ship = IN, for anything else = OUT (a default you may redefine — see METHODOLOGY §10) |
+V3 closes the gap between “the plugin is installed” and “governance is actually
+operating”:
 
-> Real, desensitized cases for each drift type: see **[CASES.md](CASES.md)**.
+- versioned package identity (`0.3.0-rc.1`) and release checks;
+- project states: `INSTALLED_NOT_BOOTSTRAPPED`, `PARTIALLY_GOVERNED`, `GOVERNED`,
+  `DRIFTED`, and `BROKEN`;
+- deterministic hook coverage for session health, high-risk operations, governance
+  writes, post-action verification, turn stop, and session end;
+- a local, source-minimized Event Ledger and Activity Report;
+- `acgm init`, `doctor`, `report`, `export-case`, `resolve`, and `version` commands;
+- explicit upgrade, reload, uninstall, and verification procedures.
 
-## Real-world hit rate (factual, not extrapolated)
+The plugin ID and repository slug remain unchanged:
 
-In a **single 2–3 hour continuous work session**, this methodology triggered
-**7 distinct drift detections** — including one data-migration bug that would have
-**silently dropped real rows** (caught at the instant of the Bash command), and a
-"your premise is false" block where a spec disagreed with code truth. One recorded
-case is an **external AI's modification plan caught by the local governance before
-merge**. The full, desensitized set is in **[CASES.md](CASES.md)**.
-
-This is **one observed window, not an extrapolated average** — assess the rate on
-your own project. If you install this and nothing ever triggers: either your project
-isn't yet at the scale that needs it, or it isn't wired correctly.
-
-## Quick start
-
-### Claude Code (the plugin — runtime-automatic)
-
-Two steps (honest — not literally one command):
-
-1. Register the marketplace:
-   ```
-   /plugin marketplace add johnrucnapier-sketch/Agent-Coding-Governance-Methodology
-   ```
-2. Install the plugin (from the `/plugin` menu, or):
-   ```
-   /plugin install agent-coding-governance-methodology@agent-coding-governance-methodology
-   ```
-
-**Exact commands follow current official Claude Code docs** — CC's plugin/marketplace
-syntax may change by version; if `/plugin install` differs, just open the `/plugin`
-menu and install it from the marketplace you added in step 1.
-
-*You'll know it worked when:* at the next session start the SessionStart hook
-injects a grounding directive — the agent acknowledges governance and runs the
-5-step grounding (or, if the project has no governance docs yet, points you to
-`governance-bootstrap`) instead of diving straight into edits.
-
-### Without the plugin (generic scaffold)
-
-If you are not using the Claude Code plugin, a plugin-free scaffolder drops the
-governance files into any project:
-
-```
-git clone https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology
-sh Agent-Coding-Governance-Methodology/scripts/governance-init.sh /path/to/your-project
+```text
+agent-coding-governance-methodology@agent-coding-governance-methodology
+johnrucnapier-sketch/Agent-Coding-Governance-Methodology
 ```
 
-It writes `CONSTITUTION.md` + `AGENTS.md` (a generic agent-governance directive) +
-a `CLAUDE.md` pointer (**idempotent & non-destructive** — existing files are
-skipped, never overwritten). The script is reviewable; `curl|sh` is deliberately
-avoided. This is a *static scaffold*, not a runtime: whether the directive is
-auto-applied depends on whether your agent reads an agents-file by convention. The
-methodology is tool-agnostic in principle — adapt the generic scaffold to your setup.
+## Requirements
 
-### Why Claude Code only (honest)
+- Claude Code `2.1.143` or newer (`displayName` support sets the minimum version);
+- Python `3.10` or newer (the runtime uses modern Python syntax; hooks, doctor,
+  reports, and Event Ledger require it);
+- Git for repository and worktree grounding.
 
-An earlier version of this repo also targeted Codex. It was removed — deliberately.
-The author's own long-horizon work is almost entirely in Claude Code; Codex was used
-only for light, short tasks, with no large multi-session projects and therefore no
-accumulated long-horizon pain to validate against. Shipping a "works on Codex too"
-claim the author had not actually stress-tested would itself be the ② cognitive
-drift this methodology exists to stop. So only what has been fully practiced ships
-here: Claude Code. The principles are tool-agnostic; this is open-source — if you
-work in Codex or another agent, take the generic scaffold and the principles and
-adapt them to your own setup.
+This RC's automated support and CI cover macOS and Linux. Native Windows hook
+execution has not been validated; do not infer Windows support from the portable
+methodology prose.
 
-### How "automatic" works (stated honestly)
+If Python is unavailable or the Python runtime crashes, ACGM reports itself as
+`BROKEN` and the wrapper fails closed for **all Bash**, because it cannot safely prove
+which commands are harmless. Other events surface a health warning instead of
+pretending governance is healthy.
 
-- **The plugin's SessionStart hook is the only runtime mechanism** — genuinely
-  auto-injected every session. Skills are invoked by the Skill tool; they do not
-  auto-fire.
-- The generic scaffold only writes static files; it is not a runtime.
-- Either way, what gets wired is auto-grounding + a constitution skeleton. Full
-  governance (decision log / snapshots / tracks) is **human-driven**: invoke
-  `governance-bootstrap` or follow `METHODOLOGY.en.md` §12 by hand.
+The installed plugin exposes `acgm` to Bash launched inside plugin-enabled Claude
+Code. An ordinary login shell is not guaranteed to inherit that PATH entry. From a
+repository clone, use `./bin/acgm` when `acgm` is not available. The ACGM command
+examples below assume plugin-enabled Claude Code Bash unless stated otherwise.
 
-## The eight principles (full text: `METHODOLOGY.en.md`)
+## Install and initialize
 
-1. Store content layered by lifecycle (constitution / decision log / snapshot /
-   version archive / contract / live handoff)
-2. The project root rules file = meta-rules + pointers + behavior constraints,
-   **never facts**
-3. Truth-first (the absolute version, no grey zone) — incl. its corollary:
-   summaries are never code-truth
-4. The session-start grounding ritual (verify before you act)
-5. Don't over-execute (expose ambiguity, don't barrel through; hard checkpoint
-   before destruction)
-6. Isolate work by track (don't mix cognitive contexts / verification methods)
-7. One trunk, never rotting — incl. its corollary: worktree discipline
-8. Scope boundary (explicit IN/OUT — default rule, redefinable per project)
+Register the marketplace and install the unchanged plugin ID:
 
-## Repo structure
-
-```
-README.md                          ← what you're reading (WHY + index); English then 中文
-METHODOLOGY.md / METHODOLOGY.en.md ← full methodology (8 principles + bootstrap + failure modes)
-CASES.md                           ← real, desensitized drift-correction cases
-.claude-plugin/
-  plugin.json                      ← this repo IS a Claude Code plugin
-  marketplace.json                 ← for /plugin marketplace add install
-hooks/hooks.json                   ← SessionStart + PostToolUse hooks (the automatic layer)
-scripts/grounding-inject.sh        ← the SessionStart hook injects a thin grounding directive → skills
-scripts/governance-init.sh         ← plugin-free generic scaffold: writes CONSTITUTION/AGENTS/CLAUDE pointer
-scripts/drift-check.sh             ← static drift scanner (run manually or in CI)
-skills/
-  session-grounding/SKILL.md       ← invoke at: session start/resume — 5-step grounding + report first
-  truth-first/SKILL.md             ← invoke at: before a technical conclusion / irreversible op — force sources
-  governance-bootstrap/SKILL.md    ← invoke at: bootstrap governance from zero — human-driven 8-step checklist
-templates/                         ← fully blank generic skeletons, zero business
-  CONSTITUTION.skeleton.md  ADR._TEMPLATE.md  SESSION_START.skeleton.md  drift-check.stub.js
-LICENSING.md / LICENSE-DOCS / LICENSE-CODE  ← dual-track: docs CC-BY-4.0, code MIT
+```bash
+claude plugin marketplace add johnrucnapier-sketch/Agent-Coding-Governance-Methodology@v0.3.0-rc.1
+claude plugin install agent-coding-governance-methodology@agent-coding-governance-methodology
 ```
 
-## Adaptation guide: take as-is vs. must adapt to your project
+In an active Claude Code session, reload installed plugins:
 
-**Take as-is (general skeleton)**: the four-drift classification / the eight
-principles / the layered structure / the bootstrap recipe / the self-check redlines.
+```text
+/reload-plugins
+```
 
-**Must redesign for your project (copying = another kind of drift)**:
-- how tracks are split (depends on where your project's core value is, how many
-  cognitive contexts)
-- the concrete IN/OUT scope-boundary list (and, if needed, the IN/OUT criterion
-  itself — it is a default, see METHODOLOGY §10)
-- exactly which protocols your cross-cutting contracts are
-- the concrete content of the redlines (decided by your product/compliance)
+Initialize the current project with the non-overwriting scaffold, then inspect it:
 
-> Principles are the skeleton, migratable; the flesh is your project's own. Don't copy
-> someone else's track/contract list.
+```bash
+acgm init .
+acgm doctor --strict
+```
 
-## Real background (the strongest credibility)
+`acgm init [PATH]` is idempotent and does not overwrite existing `CONSTITUTION.md`,
+`CLAUDE.md`, or `AGENTS.md`. It establishes the minimum scaffold; it does not invent
+your constitution, scope, tracks, ADRs, or snapshots. Complete those human decisions
+through:
 
-This system **committed drift ② against itself while being built** — the builder
-copied a pile of technical conclusions out of old handoff docs without reading the
-code, and was caught in the act by the project owner. That is exactly the proof:
-**discipline is not for "other people", it is for you, every single time you write
-something right now.** Writing a real incident like this permanently into the
-governance file as a cautionary case is ten times more useful than an abstract rule.
+```text
+/agent-coding-governance-methodology:governance-bootstrap
+```
 
-## Origin — why this exists
+Run `acgm doctor --strict` again after bootstrap. A partial or drifted project is
+reported, not silently rewritten. ACGM has no automatic “project upgrade” that edits
+user governance files.
 
-> This section is the author's personal voice — edit it freely to your own comfort.
+For a machine-verifiable `GOVERNED` state, doctor requires a non-placeholder
+Constitution and root rules plus all of the following discoverable assets:
 
-I have perfectionist tendencies, and I have lived with significant anxiety for a long
-time. For years I could no longer do the kind of long-form writing I did as a
-student — the information and thinking in my head far outran the speed at which I
-could put it on paper; my execution could not keep up with my ideas. In real work, I
-always felt boxed in by my own limitations.
+- a non-empty decision index or ADR under `decisions/`, `docs/decisions/`, or
+  `.governance/decisions/`;
+- a non-empty snapshot under `.governance/snapshots/`, `docs/snapshots/`, or
+  `snapshots/`;
+- `.governance/scope.yml` or `.governance/scope.yaml` containing both `in:` and
+  `out:` sections.
 
-The AI / agent era felt like a shackle coming off: the very weaknesses — "thinking
-too much, writing too slowly" — turned into strengths. Wide-ranging ideas could
-combine with an agent and grow into things I could never have produced alone.
+Projects may use another layout as a methodology choice, but this RC will report that
+layout as `PARTIALLY_GOVERNED`; doctor does not pretend to auto-discover arbitrary
+project conventions.
 
-Over a long stretch of agent-coding practice, hitting pitfall after pitfall, I
-gradually distilled into this methodology the answer to one question: how do you keep
-an agent consistent — making fewer mistakes, taking fewer wrong turns — across many
-sub-projects, ultra-long timelines, heavy iteration, and changing requirements? On my
-own projects it works well; and because I am risk-averse by nature, this methodology
-also makes the agent more cautious, with fewer destructive actions.
+For a plugin-free static scaffold, clone the repository and run:
 
-I am open-sourcing it so that people doing long-horizon development with an AI coding
-agent don't have to fall into the same pits I did. The principles are the
-skeleton — take them and grow your own project's flesh on them.
+```bash
+sh Agent-Coding-Governance-Methodology/scripts/governance-init.sh /path/to/project
+```
 
-## License / maintenance stance
+That fallback writes static files only; it does not install hooks or the Event Ledger.
 
-- **License: dual-track** — the methodology/docs (`METHODOLOGY*.md`, `README.md`,
-  `CASES.md`, `CONTRIBUTING.md`, the prose of each `SKILL.md`) under **CC-BY-4.0**;
-  the code/mechanical parts (`scripts/`, `hooks/`, `templates/`, `.claude-plugin/`)
-  under **MIT**. See `LICENSING.md`.
-- **Cost (untested, the author's judgment):** it likely consumes *more* tokens (more
-  reading code / verifying / restating / stopping to confirm), but buys fewer errors
-  and fewer wrong turns, compressing the most expensive part — rework. The author is
-  not token-constrained and has not measured it; assess it on your own project.
-- **Maintenance:** a methodology share — issues/PRs welcome, but **self-adaptation is
-  the norm; no heavy support promised.**
+## What runs automatically
 
-## Acknowledgements
+Hooks and skills have different guarantees.
 
-Distilled from the governance practice of a real long-horizon AI-driven development
-project. All business specificity stripped — this repo **contains, and will never
-accept,** any concrete project's business/confidential content (this is itself an
-application of §④, the scope boundary).
+When the plugin is healthy and Claude Code emits a matching event, the hook command
+runs automatically. Detection inside a hook is still deliberately bounded and
+heuristic; “automatic” does not mean “omniscient.” Skills are model-selected or
+explicitly invoked guidance and are not enforcement by themselves.
+
+| Event | Deterministic mechanism |
+|---|---|
+| `SessionStart` | Checks package/project health on startup, resume, clear, and compact; shows the resolved actual project root for wrong-cwd detection and injects state plus grounding. |
+| `PreToolUse` | Gates recognized high-risk Bash operations and denies Agent write paths to the human-owned Constitution, including potentially mutating or ambiguous Bash; clearly read-only Bash inspection remains available. |
+| `PostToolUse` | Opens or resolves post-action verification obligations and advises on risky governance-file claims without modifying the file. |
+| `PostToolUseFailure` | Treats a failed/partial high-risk call as an unknown execution result and keeps post-action verification open. |
+| `Stop` | Prevents a quiet turn ending while a post-action verification remains open, with a bounded loop cap. |
+| `SessionEnd` | Records unresolved obligations and execution states that were never observed, without assuming a denied or missing PostTool event means “not executed.” |
+
+The three selective skills are:
+
+```text
+/agent-coding-governance-methodology:session-grounding
+/agent-coding-governance-methodology:truth-first
+/agent-coding-governance-methodology:governance-bootstrap
+```
+
+## The high-risk evidence gate
+
+Before retrying a recognized high-risk operation, the agent must first run a current,
+read-only source check and put these exact fields in its immediately preceding reply:
+
+```text
+ACGM-EVIDENCE: <current-session source and observed identifier>
+ACGM-CURRENT-STATE: <state read now, not inherited from a summary>
+ACGM-VERIFY-AFTER: <concrete check to run after the operation>
+ACGM-ROLLBACK: <recovery plan if the operation hits the wrong target>
+```
+
+The source check, high-risk state change, and post-action verification must be separate
+standalone tool calls. The evidence and current-state fields must name the actual
+target; `ACGM-VERIFY-AFTER` must be a standalone, category-matching check. This avoids
+false verification from command order, unrelated output, or partial compound failure.
+
+Missing fields or missing current-session evidence are denied before the human
+permission stage. A complete gate does not authorize the operation: ACGM then asks for
+explicit human approval and keeps the declared post-action verification open until it
+is checked or recorded as unresolved.
+
+## Doctor, Activity Report, and case export
+
+Check package identity, hook presence, project state, local storage, Python, and
+continuity warnings:
+
+```bash
+acgm version
+acgm doctor
+acgm doctor --strict
+acgm doctor --json
+```
+
+Read the local Event Ledger:
+
+```bash
+acgm report --project current --limit 20
+acgm report --project current --json
+```
+
+Generate a locally sanitized case preview from an event ID, then review every line
+yourself before sharing:
+
+```bash
+acgm export-case evt_EXAMPLE -o acgm-case-preview.md
+```
+
+Classify an event after human review:
+
+```bash
+acgm resolve evt_EXAMPLE --status resolved
+```
+
+Allowed resolution states are `resolved`, `verified`, `human_override`,
+`false_positive`, and `unresolved`.
+
+## Event Ledger privacy model
+
+The Event Ledger is local-only and source-minimized. It **never automatically uploads
+data** and
+does not first collect raw material and sanitize it later. Raw hook input is processed
+in memory and discarded. Persistent events use opaque local IDs and enumerated fields.
+The local Event Ledger does not automatically upload anything.
+
+The ledger does not store project paths, file names, commands, prompts, transcript
+content, model/provider names, remote URLs, infrastructure identifiers, credentials,
+or reconstructable technical fingerprints. `export-case` creates a separate manual
+preview and never shares it automatically.
+
+Hooks receive Claude's exact `CLAUDE_PLUGIN_DATA` path explicitly. `ACGM_DATA_DIR` is
+the higher-priority manual/test override. Without either environment value, the CLI
+uses `${CLAUDE_CONFIG_DIR:-~/.claude}/plugins/data/` plus the sanitized plugin ID; for
+this plugin the default is
+`~/.claude/plugins/data/agent-coding-governance-methodology-agent-coding-governance-methodology`.
+This makes hooks and `acgm report` converge on the same store. Keep this data during
+uninstall if you want the audit history to remain available.
+
+## Upgrade and reload
+
+Refresh the marketplace, update the plugin, and reload it:
+
+```bash
+claude plugin marketplace update agent-coding-governance-methodology
+claude plugin update agent-coding-governance-methodology@agent-coding-governance-methodology
+```
+
+```text
+/reload-plugins
+```
+
+Then verify the running identity and project state:
+
+```bash
+acgm version
+acgm doctor --strict
+```
+
+An upgrade never migrates or deletes project governance assets automatically. If
+doctor reports partial governance or drift, the human decides what to add or repair.
+
+## Uninstall while keeping local data
+
+```bash
+claude plugin uninstall agent-coding-governance-methodology@agent-coding-governance-methodology --keep-data
+```
+
+`--keep-data` preserves plugin-managed Event Ledger data. Uninstalling the plugin does
+not remove governance files from project repositories. ACGM deliberately has no
+command that silently deletes project assets.
+
+## Boundaries
+
+- ACGM V3 is a Claude Code runtime implementation. The principles can be adapted to
+  other agents, but this repository does not claim equivalent runtime enforcement.
+- Compatible third-party API backends may behave differently from genuine Claude.
+  ACGM governs the observed Claude Code runtime surface; it does not identify, rank,
+  or tune the model behind a compatible endpoint.
+- ACGM does not back up transcripts, bypass account restrictions, or reconstruct an
+  inaccessible project. **ACGM Recover — Claude Code Project Recovery** is a separate
+  product line and is not part of V3.
+- Hook recognition is intentionally targeted. Human review remains the authority for
+  business judgment, Constitution changes, ambiguous operations, and false positives.
+
+## Repository map
+
+```text
+.claude-plugin/       plugin and marketplace identity
+hooks/                Claude Code lifecycle wiring
+bin/acgm              local CLI entry point
+scripts/              hook runtime, scaffold, and checks
+skills/               selective namespaced workflows
+templates/            blank project-governance skeletons
+tests/                automated fixtures plus manual Claude Code E2E
+METHODOLOGY*.md       full method
+CASES.md              real desensitized cases
+EVIDENCE.md           public claim-maturity register
+CHANGELOG.md          release history
+RELEASING.md          release checklist
+```
+
+## License and origin
+
+Methodology and prose documentation are CC-BY-4.0; mechanical code is MIT. See
+[`LICENSING.md`](LICENSING.md) for the path mapping.
+
+ACGM was distilled from long-running, multi-session development in which stale
+handoffs, fabricated technical conclusions, branch placement, and destructive-action
+mistakes repeatedly appeared. It is shared so other long-horizon projects can make
+those failure modes visible before they compound.
 
 ---
----
 
-# 中文版(完整)
+# ACGM
 
-# Agent Coding Governance —— AI 多会话开发治理体系
+**长周期 Agent Coding 漂移控制。**
 
-**面向多会话、长周期 AI 开发的治理体系——在 Claude Code 上构建并验证。**
+Agent Coding Governance Methodology（ACGM）既是一套治理方法，也是一款面向
+Claude Code 的插件，用于多 Session、长周期开发。它让反复出现的 Agent 漂移变得
+可见、可拦截、可回滚，并能在本机审计。
 
-> 英文完整版在上半部分;以下为中文完整版。
+[![Version: 0.3.0-rc.1](https://img.shields.io/badge/version-0.3.0--rc.1-orange.svg)](CHANGELOG.md)
+[![Code: MIT](https://img.shields.io/badge/code-MIT-green.svg)](LICENSING.md)
+[![Docs: CC--BY--4.0](https://img.shields.io/badge/docs-CC--BY--4.0-blue.svg)](LICENSING.md)
 
----
+> **发布状态：** `0.3.0-rc.1` 是候选版，不是稳定版。本地运行时与回归测试可以在
+> 没有 Claude 账号时验证，但升级为稳定版之前，必须通过
+> [`tests/manual/CLAUDE_CODE_E2E.md`](tests/manual/CLAUDE_CODE_E2E.md) 中的真实
+> Claude Code 验收。当前不得把这个 RC 描述成已经在最新版 Claude Code 上完整验证。
 
-> **一句话:** AI 驱动的长周期开发会**结构性地腐化**——除非有治理。
->
-> 提炼自一个真实项目(十几个版本、数十 session、~20 亿 token 踩坑)。你能得到的:
-> 在长周期里,agent 走错路更少、编造结论更少、破坏性动作更少——代价是它会更频繁地
-> 停下来核实。以 Claude Code 插件形式分发(运行时自动);另附一个无需插件的通用
-> 脚手架供其它场景。
+## 为什么需要 ACGM
 
-## 这是什么 / 为什么需要
+长周期 Agent 开发会不断积累结构性漂移：
 
-用 Claude Code(或同类 AI 编码 agent)做**多会话、长周期、可能多人/多分支**的开发,
-到一定规模后必然遇到:
+- **实施层漂移：** 技术困难时绕路、降级或掩盖问题。
+- **认知层漂移：** 把摘要、记忆或过期文档当成当前真值。
+- **结构放置漂移：** 治理或真值落在错误分支、工作树或位置。
+- **范围漂移：** 软件边界之外的内容进入代码仓库。
 
-- 新 session 不知道前面发生过什么,靠交接文档重建 → 必然失真
-- AI 整理文档时凭对话残留**编造技术结论**,不去读代码真值
-- 旧方案被推翻但没标记,下个 session 读到就走错
-- 治理/真值长在某功能分支,主干腐化,新 session 落旧主干读到全错
+ACGM 不声称消灭漂移。它提供规范方法、精准的运行时机制和审计记录，让漂移更早暴露并被
+显式处理。完整方法见 [`METHODOLOGY.md`](METHODOLOGY.md)，真实脱敏案例见
+[`CASES.md`](CASES.md)。
 
-**这不是操作失误,是这套工作流的天然成本。** 本仓库不消灭腐化(不可能),而是让它
-**显性化、可拦截、可回滚**。
+[`EVIDENCE.md`](EVIDENCE.md) 是公开的结论成熟度登记表。它区分 Observed、
+Reproduced、Corroborated、Predictive 与 Rejected，防止活动次数或单次事故静默升级成
+通用规则或被包装成战绩。
 
-## 核心:四类漂移(最值得带走的心智模型)
+## V3 新增什么
 
-先学会**识别是哪一类**,再谈怎么修。
+V3 补上“插件已经安装”和“治理确实在运行”之间的断层：
 
-| 漂移 | 错在哪 | 防线 |
-|---|---|---|
-| **① 实施层** | 技术不通就绕路(自写 polyfill / 降级 / 静默吞错) | 绕行禁令:先 root cause |
-| **② 认知层** | 写文档凭印象,不验证真值 | 真值优先:结论必带 `文件:行号`,禁"我记得/应该" |
-| **③ 结构放置** | 治理住错分支,主干腐化 | 治理只在主干 author;主干永不准腐化 |
-| **④ 范围** | 不该进仓库的内容(企业经营/战略)混进来 | 范围边界:为软件上线=IN,为别的=OUT(默认判据,可按项目重定义——见 METHODOLOGY §10) |
+- 有版本的发布身份（`0.3.0-rc.1`）与发布检查；
+- 项目状态：`INSTALLED_NOT_BOOTSTRAPPED`、`PARTIALLY_GOVERNED`、`GOVERNED`、
+  `DRIFTED`、`BROKEN`；
+- Session 健康、高风险操作、治理文档写入、后验验证、回合停止与 Session 结束的确定性
+  hook；
+- 本地、源头最小化的 Event Ledger 和 Activity Report；
+- `acgm init`、`doctor`、`report`、`export-case`、`resolve`、`version` 命令；
+- 明确的升级、重载、卸载和验证步骤。
 
-> 每类漂移的真实脱敏案例见 **[CASES.md](CASES.md)**。
+插件 ID 和仓库 slug 保持不变：
 
-## 实际命中率(事实,非外推)
-
-在**一次 2–3 小时的连续工作**里,这套方法论触发了 **7 次明确的漂移检测**——其中
-一次是会**静默丢失真实数据行**的数据迁移 bug(在 Bash 命令那一刻被拦),还有一次
-"你的前提不成立"阻塞(spec 与代码真值不符)。其中一例是**外部 AI 写的修改方案在
-合并前被本地治理拦下**。完整脱敏案例见 **[CASES.md](CASES.md)**。
-
-这是**一次观测窗口,不是外推的平均率**——具体频率请在你自己项目上判断。如果你装上
-后什么都没触发:要么你的项目还没到需要它的规模,要么没装对。
-
-## 快速开始
-
-### Claude Code(插件——运行时自动)
-
-两步(老实说,不是字面上的一条命令):
-
-1. 注册 marketplace:
-   ```
-   /plugin marketplace add johnrucnapier-sketch/Agent-Coding-Governance-Methodology
-   ```
-2. 安装插件(用 `/plugin` 菜单,或):
-   ```
-   /plugin install agent-coding-governance-methodology@agent-coding-governance-methodology
-   ```
-
-**确切命令以当前 Claude Code 官方文档为准**——CC 的 plugin/marketplace 语法可能随
-版本变化;若 `/plugin install` 形式不同,就打开 `/plugin` 菜单,从第 1 步加的
-marketplace 里装。
-
-*成功的样子:* 下次 session 启动时,SessionStart hook 会注入一段 grounding 指令——
-agent 会先确认治理、走 5 步 grounding(或在项目还没治理文档时,引导你调
-`governance-bootstrap`),而不是直接埋头改代码。
-
-### 不用插件(通用脚手架)
-
-若你不用 Claude Code 插件,有一个无需插件的脚手架,把治理文件铺进任意项目:
-
-```
-git clone https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology
-sh Agent-Coding-Governance-Methodology/scripts/governance-init.sh /你的项目路径
+```text
+agent-coding-governance-methodology@agent-coding-governance-methodology
+johnrucnapier-sketch/Agent-Coding-Governance-Methodology
 ```
 
-它写 `CONSTITUTION.md` + `AGENTS.md`(一份通用 agent 治理指令)+ `CLAUDE.md` 指针
-(**幂等、非破坏**,已存在的文件只跳过、绝不覆盖)。脚本可审阅,故意不用 `curl|sh`。
-这是**静态脚手架,不是运行时**:指令会不会被自动应用,取决于你的 agent 是否按约定
-读取 agents 文件。方法论本身原则上工具无关——把通用脚手架按你的场景适配。
+## 环境要求
 
-### 为什么只留 Claude Code(如实)
+- Claude Code `2.1.143` 或更高版本（`displayName` 支持决定最低版本）；
+- Python `3.10` 或更高版本（运行时使用现代 Python 语法；hooks、doctor、报告和
+  Event Ledger 都需要）；
+- Git，用于仓库和 worktree grounding。
 
-本仓早期版本也做过 Codex 支持,**后来主动删了**。作者自己的长周期开发几乎全程
-Claude Code;Codex 只做过轻量短任务,没有大型多会话项目,因此**没有可供验证的长
-周期痛点积累**。把一个作者并未真正压测过的"Codex 也能用"宣称发出去,本身就是这套
-方法论要消灭的②号认知漂移。所以这里只发**作者完整实践过的**:Claude Code。原则
-是工具无关的;这是开源——你若在 Codex 或别的 agent 上工作,把通用脚手架和原则拿去
-按自己的场景适配。
+本 RC 的自动化支持与 CI 覆盖 macOS 和 Linux。Windows 原生 hook 执行尚未验证；不得
+因为方法论散文可移植，就推断 Windows 运行时已经受支持。
 
-### "自动"是怎么回事(如实)
+如果 Python 不可用或 Python 运行时崩溃，ACGM 会明确报告为 `BROKEN`，wrapper 会对
+**所有 Bash 失败关闭**，因为此时无法安全证明哪条命令无害。其他事件会显示健康警告，
+而不会假装治理正常。
 
-- **插件的 SessionStart hook 是唯一的运行时机制**——每 session 真·自动注入。skill
-  由 Skill 工具调用,不自动点火。
-- 通用脚手架只写静态文件,不是运行时。
-- 两种方式接好的都是"自动 grounding + 宪法骨架"。完整治理(决策日志/快照/轨道)是
-  **人驱动**的:调用 `governance-bootstrap` 或照 `METHODOLOGY.md` §12 手做。
+插件启用后，Claude Code 内部发起的 Bash 会获得 `acgm` 命令；普通 login shell 不保证
+继承这条 PATH。从仓库 clone 运行时，如果没有 `acgm`，请使用 `./bin/acgm`。下文 ACGM
+命令示例默认在插件已启用的 Claude Code Bash 中运行，另有说明的除外。
 
-## 八条原则(完整正文:`METHODOLOGY.md`)
+## 安装与初始化
 
-1. 按生命周期分层存内容(宪法/决策日志/快照/版本归档/契约/活交接)
-2. 项目根规则文件 = 元规则+指针+行为约束,**绝不放事实**
-3. 真值优先(绝对版,无灰色地带)——含其推论:摘要永不作为代码真值
-4. session 启动 grounding 仪式(先验证再动手)
-5. 不过度执行(暴露歧义,不蛮干;销毁前硬检查点)
-6. 按轨道隔离工作(不同认知上下文/验证方法不混)
-7. 一个主干,永不腐化——含其推论:工作树纪律
-8. 范围边界(明确 IN/OUT——默认判据,可按项目重定义)
+注册 marketplace，并安装保持不变的插件 ID：
+
+```bash
+claude plugin marketplace add johnrucnapier-sketch/Agent-Coding-Governance-Methodology@v0.3.0-rc.1
+claude plugin install agent-coding-governance-methodology@agent-coding-governance-methodology
+```
+
+在已打开的 Claude Code Session 中重载插件：
+
+```text
+/reload-plugins
+```
+
+使用不覆盖现有文件的脚手架初始化当前项目，然后检查状态：
+
+```bash
+acgm init .
+acgm doctor --strict
+```
+
+`acgm init [PATH]` 是幂等的，不覆盖已有的 `CONSTITUTION.md`、`CLAUDE.md` 或
+`AGENTS.md`。它只铺最小骨架，不会替用户编造宪法、范围、轨道、ADR 或快照。这些人的
+决策通过以下完整 namespaced skill 完成：
+
+```text
+/agent-coding-governance-methodology:governance-bootstrap
+```
+
+bootstrap 完成后再次运行 `acgm doctor --strict`。部分治理或已经漂移的项目只会被报告，
+不会被静默改写。ACGM 不提供自动修改用户治理文件的“project upgrade”。
+
+Doctor 要把项目机械判定为 `GOVERNED`，需要无占位符的 Constitution、根规则，以及以下
+全部可发现资产：
+
+- `decisions/`、`docs/decisions/` 或 `.governance/decisions/` 中非空的决策索引或 ADR；
+- `.governance/snapshots/`、`docs/snapshots/` 或 `snapshots/` 中非空的快照；
+- `.governance/scope.yml` 或 `.governance/scope.yaml`，且同时包含 `in:` 与 `out:`。
+
+项目仍可按方法论选择其他布局，但本 RC 会保持报告 `PARTIALLY_GOVERNED`；doctor 不会
+假装能自动发现任意项目约定。
+
+如果只需要不含插件的静态脚手架，克隆仓库后运行：
+
+```bash
+sh Agent-Coding-Governance-Methodology/scripts/governance-init.sh /path/to/project
+```
+
+这个 fallback 只写静态文件，不安装 hooks，也不提供 Event Ledger。
+
+## 哪些会自动运行
+
+hooks 和 skills 的保证不同。
+
+插件健康且 Claude Code 发出匹配事件时，hook 命令会自动执行。但 hook 内部识别仍是有意
+收窄的启发式规则；“自动”不等于“全知”。Skills 是模型选择或用户显式调用的指导流程，
+本身不是强制机制。
+
+| 事件 | 确定性机制 |
+|---|---|
+| `SessionStart` | 在 startup、resume、clear、compact 时检查包和项目健康，显示解析后的实际项目根以发现错 cwd，并注入状态与 grounding。 |
+| `PreToolUse` | 门控已识别的高风险 Bash 操作，并拒绝 Agent 修改人类所有 Constitution 的路径，包括可能写入或含糊的 Bash；明确只读的 Bash 检查仍可使用。 |
+| `PostToolUse` | 开启或关闭后验验证义务；发现治理文档风险结论时提醒，但不修改文件。 |
+| `PostToolUseFailure` | 把失败或部分执行的高风险调用视为执行结果未知，并保持后验验证义务。 |
+| `Stop` | 后验验证仍开启时阻止回合静默结束，并设有限次循环上限。 |
+| `SessionEnd` | 在本地记录未解决义务与从未观察到执行结果的状态；不会把被拒绝或缺失 PostTool 事件武断写成“未执行”。 |
+
+三个选择性 skills 是：
+
+```text
+/agent-coding-governance-methodology:session-grounding
+/agent-coding-governance-methodology:truth-first
+/agent-coding-governance-methodology:governance-bootstrap
+```
+
+## 高风险证据门
+
+重新尝试被识别为高风险的操作之前，Agent 必须先做当前 Session 的只读取证，并在紧邻工具
+调用之前的回复中写出以下四个精确字段：
+
+```text
+ACGM-EVIDENCE: <本 Session 当下来源与实际观察到的标识符>
+ACGM-CURRENT-STATE: <刚刚读取的状态，不从摘要继承>
+ACGM-VERIFY-AFTER: <操作后要执行的具体核验>
+ACGM-ROLLBACK: <命中错误目标时的恢复方案>
+```
+
+取证、高风险状态变更和后验核验必须拆成三个独立工具调用。证据与当前状态字段必须绑定
+实际目标；`ACGM-VERIFY-AFTER` 必须是同类别的独立检查。这样才能避免命令顺序、无关输出
+或复合命令部分失败制造虚假验证。
+
+字段缺失或本 Session 没有当下取证时，操作会在进入人工权限阶段之前被拒绝。四项齐全也
+不代表获得授权：ACGM 随后仍会要求人明确批准，并保持后验验证义务，直到它被核验或记录
+为 unresolved。
+
+## Doctor、Activity Report 与案例导出
+
+检查包身份、hook 是否齐全、项目状态、本地存储、Python 和连续性提醒：
+
+```bash
+acgm version
+acgm doctor
+acgm doctor --strict
+acgm doctor --json
+```
+
+读取本地 Event Ledger：
+
+```bash
+acgm report --project current --limit 20
+acgm report --project current --json
+```
+
+根据 event ID 生成本地脱敏案例预览；分享之前必须由人逐行检查：
+
+```bash
+acgm export-case evt_EXAMPLE -o acgm-case-preview.md
+```
+
+人工审查后给事件分类：
+
+```bash
+acgm resolve evt_EXAMPLE --status resolved
+```
+
+允许的状态是 `resolved`、`verified`、`human_override`、`false_positive` 和
+`unresolved`。
+
+## Event Ledger 隐私模型
+
+Event Ledger 只在本机工作，并从源头最小化。它**绝不自动上传数据**，也不是先收集原始内容再
+事后脱敏。原始 hook 输入只在内存中处理，随后丢弃；持久事件只使用本机不透明 ID 和枚举
+字段。
+事件日志仅存本机，不自动上传。
+
+Ledger 不记录项目路径、文件名、命令、prompt、transcript 正文、模型或服务商名称、远程
+URL、基础设施标识符、凭据，也不记录可重建的技术指纹。`export-case` 只生成另一份需要
+人工检查的本地预览，绝不会自动分享。
+
+Hooks 会显式获得 Claude 给出的准确 `CLAUDE_PLUGIN_DATA` 路径；`ACGM_DATA_DIR` 是优先级
+更高的人工/测试覆盖。两个环境值都没有时，CLI 使用
+`${CLAUDE_CONFIG_DIR:-~/.claude}/plugins/data/` 加脱敏插件 ID；本插件默认路径是
+`~/.claude/plugins/data/agent-coding-governance-methodology-agent-coding-governance-methodology`。
+因此 hooks 与 `acgm report` 会收敛到同一存储。希望卸载后仍保留审计历史时，请保留这些
+数据。
+
+## 升级与重载
+
+刷新 marketplace、更新插件并重载：
+
+```bash
+claude plugin marketplace update agent-coding-governance-methodology
+claude plugin update agent-coding-governance-methodology@agent-coding-governance-methodology
+```
+
+```text
+/reload-plugins
+```
+
+然后验证实际运行身份和项目状态：
+
+```bash
+acgm version
+acgm doctor --strict
+```
+
+升级不会自动迁移或删除项目里的治理资产。doctor 若报告部分治理或漂移，由人决定补什么、
+修什么。
+
+## 卸载但保留本地数据
+
+```bash
+claude plugin uninstall agent-coding-governance-methodology@agent-coding-governance-methodology --keep-data
+```
+
+`--keep-data` 保留由插件管理的 Event Ledger 数据。卸载插件不会移除各项目仓库中的治理
+文件。ACGM 不提供静默删除项目资产的命令。
+
+## 边界
+
+- ACGM V3 是 Claude Code 运行时实现。原则可以适配其他 Agent，但本仓不声称具有等价的
+  跨平台强制能力。
+- 兼容接口接入的第三方 API 后端可能与真正 Claude 表现不同。ACGM 治理可观察到的
+  Claude Code 运行表面，不识别、不评价、也不针对兼容接口背后的模型做调优。
+- ACGM 不备份 transcript、不绕过账号限制，也不负责从不可访问的平台重建项目。
+  **ACGM Recover — Claude Code Project Recovery** 是独立产品线，不属于 V3。
+- hook 识别有意保持精准和有限。业务判断、修宪、含糊操作与误报的最终裁定权始终属于人。
 
 ## 仓库结构
 
-```
-README.md                          ← 你正在读的(WHY + 索引);英文在前,中文在后
-METHODOLOGY.md / METHODOLOGY.en.md ← 完整方法论(八原则 + bootstrap 配方 + 失败模式)
-CASES.md                           ← 真实、脱敏的漂移纠错案例
-.claude-plugin/
-  plugin.json                      ← 本仓即一个 Claude Code plugin
-  marketplace.json                 ← 供 /plugin marketplace add 安装
-hooks/hooks.json                   ← SessionStart + PostToolUse 钩子(自动层)
-scripts/grounding-inject.sh        ← SessionStart hook 注入薄 grounding 指令,指向 skills
-scripts/governance-init.sh         ← 无需插件的通用脚手架:铺 CONSTITUTION/AGENTS/CLAUDE 指针
-scripts/drift-check.sh             ← 静态漂移扫描器(手动或 CI 跑)
-skills/
-  session-grounding/SKILL.md       ← 调用时机:session 启动/续接,5步grounding+先报告
-  truth-first/SKILL.md             ← 调用时机:写技术结论/不可逆操作前,强制来源
-  governance-bootstrap/SKILL.md    ← 调用时机:新项目从零建治理,人驱动8步清单
-templates/                         ← 全空白通用骨架,零业务
-  CONSTITUTION.skeleton.md  ADR._TEMPLATE.md  SESSION_START.skeleton.md  drift-check.stub.js
-LICENSING.md / LICENSE-DOCS / LICENSE-CODE  ← 双轨:文档 CC-BY-4.0,代码 MIT
+```text
+.claude-plugin/       插件与 marketplace 身份
+hooks/                Claude Code 生命周期接线
+bin/acgm              本地 CLI 入口
+scripts/              hook 运行时、脚手架与检查
+skills/               选择性 namespaced 工作流
+templates/            空白项目治理骨架
+tests/                自动 fixtures 与 Claude Code 人工 E2E
+METHODOLOGY*.md       完整方法论
+CASES.md              真实脱敏案例
+EVIDENCE.md           公开结论成熟度登记表
+CHANGELOG.md          版本历史
+RELEASING.md          发布验收清单
 ```
 
-## 适配指南:直接拿用 vs 必须按你项目改
+## License 与来源
 
-**直接拿用(通用骨架)**:四类漂移分类 / 八原则 / 分层结构 / bootstrap 配方 /
-自检红线。
+方法论和散文文档采用 CC-BY-4.0；机械代码采用 MIT。路径映射见
+[`LICENSING.md`](LICENSING.md)。
 
-**必须按你项目重新设计(照抄=另一种漂移)**:
-- 轨道怎么分(取决于你项目核心价值在哪、有几个认知上下文)
-- 范围边界 IN/OUT 具体清单(如有需要,连 IN/OUT 判据本身也可改——它是默认,见
-  METHODOLOGY §10)
-- 跨切面契约具体是哪些协议
-- 红线具体内容(你的产品/合规决定)
-
-> 原则是骨架,可迁移;血肉是你项目自己的。别把别人的轨道/契约清单照抄。
-
-## 真实背景(最强的可信度)
-
-这套体系**在被搭建的过程中,搭建者自己就犯了②号漂移**——从旧交接文档抄了一堆技术
-结论没去读代码,被项目所有者当场抓出。这恰恰证明:**纪律不是给"别人"的,是给当下
-每一次写字的你的。** 把这类真实事故永久写进治理文件当警示案例,比抽象规则有用十倍。
-
-## 初衷 / 为什么会有这套东西
-
-> 这一段是作者的个人表达——这是你的声音,按你自己的舒适度自由增删。
-
-我有完美主义倾向,也长期与焦虑相处。过去很多年,我没法再像学生时代那样做长文本写作
-——脑子里的信息和思考,远远超过我能落到纸上的速度;执行能力追不上想法。在现实工作里,
-我总觉得被自己的局限性卡住。
-
-AI / agent 的时代对我像是枷锁被打开:那些"想得太多、写得太慢"的缺点,反而变成了
-优势——天马行空的想法可以和 agent 结合,长出很多原本我做不出来的东西。
-
-在长时间的 agent coding 实践里,我一次次踩坑,逐渐把"怎么让 agent 在多子项目、超长
-周期、大量迭代和需求变化中仍然保持一致、少犯错、少走错路"沉淀成了这套方法论。在我
-自己的项目里它效果很好;因为我本人是风险厌恶者,这套方法论也让 agent 更谨慎、破坏性
-的动作更少。
-
-我把它开源,是想让同样在用 AI 编码 agent 做长周期开发的人,不必把我踩过的坑再踩
-一遍。原则是骨架,拿去按你自己的项目长出血肉。
-
-## License / 维护态度
-
-- **License:双轨**——方法论/文档(`METHODOLOGY*.md`、`README.md`、`CASES.md`、
-  `CONTRIBUTING.md`、各 `SKILL.md` 正文)采用 **CC-BY-4.0**;代码/机械件
-  (`scripts/`、`hooks/`、`templates/`、`.claude-plugin/`)采用 **MIT**。详见
-  `LICENSING.md`。
-- **成本(未实测,作者判断):** 很可能消耗*更多* token(更多读码/验证/转述/停下
-  确认),但换来更少错误与走错路,从而压缩最贵的返工。作者不缺 token、未实测,增减
-  请在你自己项目上体验。
-- **维护:** 方法论分享,欢迎 issue/PR,但**自行适配为主,不承诺重度支持**。
-
-## 致谢
-
-提炼自一个真实长周期 AI 驱动开发项目的治理实践。已剥离全部业务特质——仓库内**不含也
-永不接受**任何具体项目的业务/机密内容(这本身就是 §④ 范围边界的应用)。
+ACGM 来自真实的长周期、多 Session 开发：过期交接、虚构技术结论、分支放置错误和破坏性
+操作风险反复出现。这套方法被公开，是为了让其他长期项目能在这些失效相互叠加之前看见它们。

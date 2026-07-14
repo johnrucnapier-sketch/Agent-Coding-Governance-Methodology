@@ -29,34 +29,48 @@ generic skeletons, honest corrections to claims, bug fixes in `scripts/`.
 **Out of scope:** anything tying the repo to a specific product / company / private
 context; "do my project's governance for me"; large framework-style additions.
 
-## Evidence requirements for new normative content (the 2-independent-evidence rule)
+## Evidence maturity for normative content
 
-New normative content (principles, corollaries, Meta-observations, hook
-mechanisms) must be supported by **at least two independent supporting events** to
-enter the main clause list. Evidence may be:
+Every proposed principle, operational rule, Meta-observation, or hook mechanism
+must have an entry in [`EVIDENCE.md`](EVIDENCE.md). Evidence matures by what has
+actually been established, not by an arbitrary number of days or by counting
+mentions:
 
-- **Observed events:** the same failure mode occurring in different sessions,
-  different tasks, different times — transcript / log indexable.
-- **Reasoned predictions:** failure forms inferable from known agent / tool
-  behavior patterns — the reasoning must be stated.
+- **Observed** — one traceable real occurrence. It establishes that the event
+  happened, not that a general rule or mechanism is already justified.
+- **Reproduced** — the same failure or mechanism has been produced again under
+  documented conditions, with the causal path checked.
+- **Corroborated** — independent observations or an observation plus a faithful
+  reproduction support the same general claim. Stable normative rules and default
+  blocking mechanisms require this level.
+- **Predictive** — a reasoned, testable hypothesis with no direct observation yet.
+  It may guide instrumentation or a Meta-observation, but not a default hard gate.
+- **Rejected** — contradicted, misattributed, or too incident-shaped to retain as
+  an active claim. Keep the evidence record so the mistake is not rediscovered.
 
-**Clauses supported by only one observed event:** label them as **"advisory
-clause · single direct event of support, pending second-evidence confirmation"** at
-the top of the clause body; grace period **≤ 30 days**. If a second independent
-event is not produced in that window, downgrade the clause to Meta-observations or
-remove it.
+Status applies to a **claim**, not to an entire case. A case may contain an
+Observed weak form and a Predictive strong form. Hook activation, a skill name in a
+transcript, or an agent citing a principle is not independent evidence that the
+governance prevented anything; initiator, timing, outcome, and verification must be
+established.
 
-**Predictive content with no observed event:** does not enter main clauses; goes
-to the Meta-observations chapter as "predicted but not observed". Re-evaluate per
-the 2-independent-evidence rule upon the first observation.
+### Release gate
 
-**This rule's purpose:** prevent the methodology from being shaped 1:1 by any
-single incident. Incident-shaped content is a code smell; principle-shaped content
-generalizes. Strong observed-event support is the only way through.
+Before a stable release:
 
-> This rule applies to ACGM itself: any future change to METHODOLOGY (new
-> corollaries, Meta-observations, mechanism additions) must declare its evidence
-> status under this rule explicitly. Past clauses are grandfathered.
+1. Every changed normative or mechanical claim is indexed in `EVIDENCE.md` with
+   sources, limits, and its current maturity.
+2. Stable rules and default blocking behavior are **Corroborated**. Observed or
+   Reproduced trials may ship only in a prerelease, explicitly scoped and with a
+   test/review decision recorded.
+3. Predictive claims stay non-blocking and visibly labeled. Rejected claims are
+   removed from active rules and mechanisms.
+4. No unresolved trial silently crosses the release boundary: promote, keep it in
+   a prerelease, merge it into an already-supported rule, or reject it.
+
+This preserves the original purpose — prevent one incident from shaping the whole
+methodology — without an unenforced "two events within 30 days" timer. Review is a
+release decision backed by evidence, not a calendar ritual.
 
 ## Contributing a drift case (zero-code path)
 
@@ -110,26 +124,39 @@ under **CC-BY-4.0**, code / mechanical parts under **MIT** (see `LICENSING.md`).
 **不在范围:** 把仓库绑到具体产品 / 公司 / 私有上下文;"替我做我项目的治理";
 庞大的框架式新增。
 
-## 新规范内容的证据要求(2-独立证据规则)
+## 新规范内容的证据成熟度
 
-新规范内容(原则、推论、元观察、hook 机制)必须有**至少 2 个独立支撑事件**才能进入
-主条款列表。证据可以是:
+任何拟新增的原则、操作规则、元观察或 hook 机制,都必须在
+[`EVIDENCE.md`](EVIDENCE.md) 建立条目。证据按真正建立了什么来成熟,不按任意天数或
+提及次数计算:
 
-- **已观察事件:** 不同 session、不同任务、不同时间发生的同类失效——transcript / 日志可指。
-- **合理预测事件:** 基于已知 agent / 工具行为模式可推断的失效形态——**推断依据必须明文**。
+- **Observed(已观察)** —— 一次可追溯的真实事件。它只能证明事件发生过,不能直接证明
+  一条通用规则或机制已经成立。
+- **Reproduced(已复现)** —— 在有记录的条件下再次产生同类失效或机制行为,并核过因果链。
+- **Corroborated(已佐证)** —— 独立观察,或一次观察加一次忠实复现,共同支持同一通用
+  结论。稳定规范和默认阻断机制必须达到此级。
+- **Predictive(预测性)** —— 有推理依据、可测试,但尚无直接观察。可指导埋点或元观察,
+  不得直接成为默认硬门。
+- **Rejected(已否决)** —— 被证据反驳、归因错误,或过度贴合单一事故。保留证据记录,
+  但从活跃规则中移除,避免以后重犯。
 
-**只有 1 个已观察事件支撑的条款:** 在条款正文顶部标注 **"建议性条款 · 单次直接事件
-支撑,待第二独立证据确认"**;**过渡期 ≤ 30 天**。若该窗口内未补到第二独立证据,降级
-到元观察章节,或删除。
+状态属于一条**结论**,不是整个案例。一个案例可以同时包含 Observed 的弱形态和
+Predictive 的强形态。Hook 触发、transcript 出现 skill 名、agent 引用某条原则,都不
+等于治理真的阻止了问题;必须核清 initiator、发生在动作前还是后、结果和验证。
 
-**无任何观察事件的预测性内容:** 不入主条款,进元观察章节作为"预测但未观察"。一旦
-观察到首例,按 2-独立证据规则重新评估。
+### Release gate(发布门)
 
-**本规则的目的:** 防止方法论被任一次事故 1:1 塑形。事故反推式(incident-shaped)
-的条款是代码气味;原理推演式(principle-shaped)才能泛化。强观察证据支撑是唯一通路。
+稳定版发布前:
 
-> 本规则适用于 ACGM 自身:METHODOLOGY 未来任何改动(新推论、元观察、机制新增)必须
-> 在条款里明文声明本规则下的证据状态。历史条款 grandfathered(不溯及既往)。
+1. 本次改动涉及的每条规范或机械结论,都在 `EVIDENCE.md` 登记来源、限制和成熟度。
+2. 稳定规则及默认阻断行为必须是 **Corroborated**。Observed / Reproduced 的试验只能
+   进入预发布版,且必须明确范围、测试和复审决定。
+3. Predictive 结论保持非阻断并显式标注;Rejected 结论退出活跃规则与机制。
+4. 未决试验不得静默跨过发布边界:必须晋级、继续留在预发布版、并入已有成熟规则,
+   或否决。
+
+这样保留原规则的目的——防止一次事故把方法论 1:1 塑形——但不再依赖一个无人执行的
+"两事件 + 30 天"计时器。复审是有证据的发布决策,不是日历仪式。
 
 ## 贡献漂移案例(零代码门槛)
 

@@ -1,0 +1,5 @@
+{
+  "session_id": "fixture-session-start",
+  "source": "startup",
+  "cwd": "__PROJECT_ROOT__"
+}

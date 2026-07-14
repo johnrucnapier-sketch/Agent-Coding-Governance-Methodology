@@ -1,0 +1,9 @@
+{
+  "session_id": "fixture-safe-bash",
+  "cwd": "__PROJECT_ROOT__",
+  "tool_name": "Bash",
+  "tool_use_id": "tool-safe-1",
+  "tool_input": {
+    "command": "git status --short"
+  }
+}

@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.11"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Check shell syntax
+        run: |
+          sh -n scripts/acgm-hook.sh
+          sh -n scripts/build-release.sh
+          sh -n bin/acgm
+
+      - name: Run unit and fixture tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Validate release contract
+        run: python3 scripts/release_check.py
+
+      - name: Exercise deterministic manifest generation
+        run: python3 scripts/generate-package-manifest.py --stdout --source git > "${RUNNER_TEMP}/PACKAGE_MANIFEST.preview.json"

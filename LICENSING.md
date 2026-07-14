@@ -13,13 +13,20 @@ uses two licenses. The `license` field in `.claude-plugin/plugin.json` is set to
 |---|---|---|
 | `METHODOLOGY.md`, `METHODOLOGY.en.md` | CC-BY-4.0 | `LICENSE-DOCS` |
 | `README.md` | CC-BY-4.0 | `LICENSE-DOCS` |
+| `CHANGELOG.md`, `RELEASING.md` | CC-BY-4.0 | `LICENSE-DOCS` |
 | `CONTRIBUTING.md` | CC-BY-4.0 | `LICENSE-DOCS` |
 | `CASES.md` | CC-BY-4.0 | `LICENSE-DOCS` |
+| `EVIDENCE.md` | CC-BY-4.0 | `LICENSE-DOCS` |
 | `skills/**/SKILL.md` (prose body) | CC-BY-4.0 | `LICENSE-DOCS` |
+| `tests/manual/**` | CC-BY-4.0 | `LICENSE-DOCS` |
 | `LICENSING.md` | CC-BY-4.0 | `LICENSE-DOCS` |
+| `VERSION`, `PACKAGE_MANIFEST.json` | MIT | `LICENSE-CODE` |
+| `bin/**` | MIT | `LICENSE-CODE` |
 | `scripts/**` | MIT | `LICENSE-CODE` |
 | `hooks/**` | MIT | `LICENSE-CODE` |
 | `templates/**` | MIT | `LICENSE-CODE` |
+| `tests/**` except `tests/manual/**` | MIT | `LICENSE-CODE` |
+| `.github/**` | MIT | `LICENSE-CODE` |
 | `.claude-plugin/**` | MIT | `LICENSE-CODE` |
 
 ## Notes / 说明
