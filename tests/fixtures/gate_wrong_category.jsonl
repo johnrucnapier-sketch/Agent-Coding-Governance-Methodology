@@ -1,0 +1,3 @@
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tool-source-git","name":"Bash","input":{"command":"git status --short"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool-source-git","content":""}]},"toolUseResult":{"stdout":"","stderr":"","interrupted":false,"exitCode":0}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"ACGM-EVIDENCE: current-session evidence was requested for /tmp/acgm-fixture-target, but only Git state was checked.\nACGM-CURRENT-STATE: the state of /tmp/acgm-fixture-target is not established by that check.\nACGM-VERIFY-AFTER: test ! -e /tmp/acgm-fixture-target\nACGM-ROLLBACK: restore /tmp/acgm-fixture-target from the reviewed backup."}]}}

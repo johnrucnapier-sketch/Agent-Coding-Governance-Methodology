@@ -1,0 +1,10 @@
+{
+  "session_id": "fixture-destructive-bash",
+  "cwd": "__PROJECT_ROOT__",
+  "tool_name": "Bash",
+  "tool_use_id": "tool-destructive-1",
+  "tool_input": {
+    "command": "rm -rf /tmp/acgm-fixture-target"
+  },
+  "transcript_path": "__TRANSCRIPT_PATH__"
+}

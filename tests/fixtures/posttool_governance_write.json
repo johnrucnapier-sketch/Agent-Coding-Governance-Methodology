@@ -1,0 +1,13 @@
+{
+  "session_id": "fixture-posttool-write",
+  "cwd": "__PROJECT_ROOT__",
+  "tool_name": "Write",
+  "tool_use_id": "tool-write-1",
+  "tool_input": {
+    "file_path": "__GOVERNANCE_FILE__",
+    "content": "This project uses a hidden service without a current source."
+  },
+  "tool_response": {
+    "success": true
+  }
+}

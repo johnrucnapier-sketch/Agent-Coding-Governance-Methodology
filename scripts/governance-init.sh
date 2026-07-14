@@ -4,9 +4,9 @@
 # What this is (honest, per the methodology's own truth-first principle):
 #   This is a SCAFFOLDER, not a runtime. It writes governance files into a target
 #   project so the discipline is in place from session one.
-#     - Claude Code: prefer the plugin (`/plugin marketplace add ...`); its
-#       SessionStart hook injects grounding automatically at runtime. You do not
-#       need this script.
+#     - Claude Code: prefer the plugin (`/plugin marketplace add ...`); its hooks
+#       detect project state, inject grounding, gate selected high-risk actions,
+#       and keep a local sanitized event ledger. `acgm init` calls this script.
 #     - No plugin / other setups: this writes CONSTITUTION.md + AGENTS.md (a
 #       generic agent-governance directive) + a CLAUDE.md pointer as STATIC files.
 #       Whether the directive is auto-applied depends on whether your agent reads
@@ -103,6 +103,11 @@ apply to every session. Read and follow them before doing anything.
 - Before destructive ops: list what is affected + write a rollback + quote the
   human's authorization verbatim. /
   破坏性操作前:列影响面 + 写回滚 + 原文引用人的授权。
+- Before a high-risk Bash retry, use the exact four fields required by the ACGM
+  gate: `ACGM-EVIDENCE:`, `ACGM-CURRENT-STATE:`, `ACGM-VERIFY-AFTER:`, and
+  `ACGM-ROLLBACK:`. The hook denies missing evidence before asking the human. /
+  重试高风险 Bash 前,按 ACGM 门控准确填写四个字段;缺证据时 hook 会先拒绝,不会把
+  不完整操作直接交给人批准。
 
 ## Scope / 范围
 
@@ -128,17 +133,17 @@ else
 
 This project uses agent-coding-governance.
 
-- If the Claude Code plugin is installed, its SessionStart hook injects the
-  grounding directive automatically — follow it. If not, the same rules live in
-  `AGENTS.md`; read and follow them.
+- If the Claude Code plugin is installed, its lifecycle hooks report the project
+  state and inject grounding — follow them. Run `acgm doctor` when the state is
+  partial, drifted, or broken. If the plugin is absent, read `AGENTS.md`.
 - Governance constitution: `./CONSTITUTION.md` (humans only).
 - This file holds only meta-rules, pointers, and behavior constraints — never
   facts that can be re-derived from code (Principle 2).
 
 本项目启用 agent-coding-governance。
 
-- 装了 Claude Code 插件:SessionStart hook 会自动注入 grounding 指令,照做。
-  没装:同样的规则在 `AGENTS.md`,读它并遵守。
+- 装了 Claude Code 插件:生命周期 hooks 会报告项目状态并注入 grounding,照做。
+  状态为 partial/drifted/broken 时运行 `acgm doctor`;没装则读 `AGENTS.md`。
 - 治理宪法:`./CONSTITUTION.md`(仅人可改)。
 - 本文件只装元规则、指针、行为约束——绝不写能从代码反推的事实(第 2 原则)。
 EOF
@@ -158,3 +163,5 @@ echo "     读 AGENTS.md(按约定读 agents 文件的 agent 会自动读)。"
 echo "  4. Full governance (decision log, snapshots, tracks) is human-driven —"
 echo "     run governance-bootstrap / METHODOLOGY §12. /"
 echo "     完整治理(决策日志/快照/轨道)是人驱动的——走 governance-bootstrap / §12。"
+echo "  5. Run 'acgm doctor' to verify the real plugin and project state. /"
+echo "     运行 'acgm doctor' 验证插件与项目的真实状态。"

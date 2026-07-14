@@ -2,8 +2,9 @@
 # drift-check.sh — static drift scanner for agent-coding-governance-methodology.
 #
 # Exit 0 = no drift detected, 1 = drift detected. Default: markdown report to
-# stdout. `--output FILE` also writes the report to FILE. `--strict` enables the
-# heuristic ① implementation-pattern scan (OFF by default — it is noisy).
+# stdout. `--project DIR` selects the project explicitly; the default is
+# CLAUDE_PROJECT_DIR, then the caller's current directory. `--json` emits a
+# machine-readable report. `--strict` enables the heuristic ① scan.
 #
 # DESIGN — why this does not cry wolf on its own repo:
 #   The ② text scan targets a PROJECT'S ACTIVE GOVERNANCE DOCS — CONSTITUTION.md,
@@ -26,19 +27,32 @@ set -eu
 
 STRICT=0
 OUTFILE=""
+PROJECT="${CLAUDE_PROJECT_DIR:-.}"
+JSON=0
+IGNORE_BRANCHES="backup/* archive/*"
 while [ $# -gt 0 ]; do
   case "$1" in
     --strict) STRICT=1 ;;
+    --json) JSON=1 ;;
+    --project) shift; PROJECT="${1:-}" ;;
+    --project=*) PROJECT="${1#--project=}" ;;
+    --ignore-branch) shift; IGNORE_BRANCHES="$IGNORE_BRANCHES ${1:-}" ;;
+    --ignore-branch=*) IGNORE_BRANCHES="$IGNORE_BRANCHES ${1#--ignore-branch=}" ;;
     --output) shift; OUTFILE="${1:-}" ;;
     --output=*) OUTFILE="${1#--output=}" ;;
     -h|--help)
-      echo "usage: drift-check.sh [--strict] [--output FILE]"; exit 0 ;;
+      echo "usage: drift-check.sh [--project DIR] [--strict] [--json] [--ignore-branch GLOB] [--output FILE]"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
   shift
 done
 
-ROOT=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
+if [ -z "$PROJECT" ] || [ ! -d "$PROJECT" ]; then
+  echo "project directory not found: $PROJECT" >&2
+  exit 2
+fi
+PROJECT=$(CDPATH= cd "$PROJECT" && pwd)
+ROOT=$(git -C "$PROJECT" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PROJECT")
 cd "$ROOT"
 
 TMP=$(mktemp -d)
@@ -78,7 +92,9 @@ strip_quoted() {
       -e 's/\*\*[^*]*\*\*/ /g'
 }
 
-GOV_GLOBS=$(git ls-files 2>/dev/null | grep -E '(^|/)(CONSTITUTION|AGENTS|CLAUDE)\.md$|^decisions/.*\.md$|^\.governance/.*\.(md|yml|yaml)$' || true)
+GOV_GLOBS=$({ git ls-files 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null; } \
+  | sort -u \
+  | grep -E '(^|/)(CONSTITUTION|AGENTS|CLAUDE)\.md$|^decisions/.*\.md$|^\.governance/.*\.(md|yml|yaml)$' || true)
 
 UNCERT='我记得|应该是|大概|可能是|似乎|据说|I recall|should be|probably|supposedly|seems\b'
 TECH='使用|依赖|调用|导入|配置为|\buses\b|\bimports\b|depends on|\bcalls\b'
@@ -130,6 +146,11 @@ if [ -n "$TRUNK" ]; then
   NOW=$(date +%s)
   git for-each-ref --format='%(refname:short)' refs/heads/ | while IFS= read -r br; do
     [ "$br" = "$TRUNK" ] && continue
+    ignored=0
+    for pattern in $IGNORE_BRANCHES; do
+      case "$br" in $pattern) ignored=1 ;; esac
+    done
+    [ "$ignored" = 1 ] && { echo "branch '$br' — ignored by archive/backup branch policy" >> "$TMP/ignored"; continue; }
     last=$(git log -1 --format='%ct' "$br" 2>/dev/null || echo "$NOW")
     age_days=$(( (NOW - last) / 86400 ))
     d=$(git diff --name-only "$TRUNK".."$br" -- $GOVPATHS 2>/dev/null || true)
@@ -200,7 +221,36 @@ TOTAL=$(grep -c . "$TMP/detected" 2>/dev/null || true); TOTAL=${TOTAL:-0}
   echo "_Scope of ② scan: a project's active governance docs (CONSTITUTION/AGENTS/CLAUDE/decisions/.governance) — pedagogical docs are intentionally not scanned. Fenced code, blockquotes, quoted spans and \`drift-check:ignore\` regions are excluded by design._"
 } > "$REPORT"
 
-cat "$REPORT"
-[ -n "$OUTFILE" ] && cp "$REPORT" "$OUTFILE"
+if [ "$JSON" = 1 ]; then
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "--json requires python3" >&2
+    exit 2
+  fi
+  JSON_REPORT="$TMP/report.json"
+  python3 - "$ROOT" "$n1" "$n2" "$n3" "$n4" "$TOTAL" "$TMP/detected" "$TMP/ignored" > "$JSON_REPORT" <<'PY'
+import json, pathlib, sys
+root, n1, n2, n3, n4, total, detected, ignored = sys.argv[1:]
+def lines(path):
+    try:
+        return pathlib.Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+print(json.dumps({
+    "schema_version": 1,
+    "project_root": root,
+    "summary": {
+        "implementation": int(n1), "cognitive": int(n2),
+        "structural": int(n3), "scope": int(n4), "total": int(total)
+    },
+    "detected": sorted(set(lines(detected))),
+    "ignored": sorted(set(lines(ignored))),
+}, ensure_ascii=False, separators=(",", ":")))
+PY
+  cat "$JSON_REPORT"
+  [ -n "$OUTFILE" ] && cp "$JSON_REPORT" "$OUTFILE"
+else
+  cat "$REPORT"
+  [ -n "$OUTFILE" ] && cp "$REPORT" "$OUTFILE"
+fi
 
 [ "$TOTAL" -eq 0 ] && exit 0 || exit 1

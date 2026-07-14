@@ -1,58 +1,108 @@
 ---
 name: session-grounding
-description: Use at the START of every session, when resuming or continuing prior work, or when picking up a half-done task in a governed project — before taking ANY action. 在每个 session 启动、续接、接半截活时,动手前先走此流程。Runs the 5-step grounding ritual — read constitution + root rules, identify the track, report 5 items and WAIT for human confirmation, verify after changes, get approval before commit. Restate before you act.
+description: Use at the START of every new, resumed, cleared, or compacted session, or when taking over half-done work in an ACGM-governed project. 在 ACGM 项目的新开、续接、clear、compact 后 Session 或接手半截工作时使用。Read current project truth, identify track and scope, report the five grounding items, and wait for human confirmation before edits.
 ---
 
-# Session Grounding
+# ACGM Session Grounding
 
-A new or resumed session rebuilds context from handoffs and "memory" — and that
-reconstruction always distorts. This ritual catches the distortion *before* code is
-written, where it is an order of magnitude cheaper to fix.
+This is the selective workflow invoked as:
 
-**Restate first, then act.** This is the whole point.
+```text
+/agent-coding-governance-methodology:session-grounding
+```
 
-## The 5 steps (do not skip, do not skim)
+The `SessionStart` hook runs automatically when healthy and reports the project state.
+This skill does not auto-fire and does not replace that mechanism. It performs the
+human-visible grounding judgment after the hook has oriented the session.
 
-1. **Read the constitution + the root rules file in full.** Not skim-read. These are
-   the non-negotiable principles and the pointers to where truth lives.
-2. **Identify which track / scope this session falls in.** Load that layer's docs too.
-   One session works in one track; cross-track work is split into consecutive sessions.
-3. **Report these 5 things, then WAIT for the human to confirm before acting:**
-   - which track you are in
-   - current state from `git log` + `git status`
-   - the relevant structure you saw *by actually reading the code* (not from memory)
-   - the exact list of files you intend to change (concrete paths)
-   - the execution steps you intend to take
-4. **After changes, run the verification scripts.**
-5. **Closing report + commit draft — wait for human approval before committing.**
+## Before acting
 
-> The deviation exposed at the restate stage is far cheaper than the one found after
-> the code is written. If you cannot read a truth source, say so explicitly — do not
-> guess. (Before any technical conclusion or irreversible action, the `truth-first`
-> skill applies.)
+1. Run `acgm doctor` if SessionStart reports `BROKEN`, `PARTIALLY_GOVERNED`, or
+   `DRIFTED`. Do not claim ACGM is healthy when doctor says otherwise.
+2. Read the Constitution and root rules in full. Follow their pointers to the current
+   truth sources; do not treat the root rules themselves as a technical-fact cache.
+3. Identify the worktree, branch, track, and scope for this task. One session works in
+   one track; split cross-track work into explicit consecutive stages.
+4. Re-read current code, configuration, and Git state. A handoff, transcript, memory,
+   compacted summary, or prior report is historical evidence, never current code truth.
+5. Report these five items, then **wait for human confirmation before editing**:
+   - track and scope;
+   - current `git log` and `git status` state;
+   - relevant structure observed by reading current sources;
+   - exact files proposed for change;
+   - execution and verification steps.
+
+After changes, run the declared checks. Give a closing report and commit draft; wait
+for human approval before committing.
+
+## High-risk handoff to Truth-First
+
+Before a recognized high-risk operation, invoke:
+
+```text
+/agent-coding-governance-methodology:truth-first
+```
+
+Run the read-only source check first, then put these exact fields in the reply
+immediately before the tool call:
+
+```text
+ACGM-EVIDENCE: <current-session source and observed identifier>
+ACGM-CURRENT-STATE: <state read now>
+ACGM-VERIFY-AFTER: <concrete post-action check>
+ACGM-ROLLBACK: <recovery plan>
+```
+
+The four fields are evidence, not authorization. The PreToolUse hook still asks the
+human before the operation and keeps post-action verification open.
 
 ---
 
-# Session 启动 grounding(先验证再动手)
+# ACGM Session 启动 Grounding
 
-新开/续接的 session 靠交接和"记忆"重建上下文,重建必然失真。这套仪式在**写代码之前**
-就把失真抓出来——那时修正便宜一个数量级。
+完整调用名：
 
-**先转述,再动手。** 这就是全部要义。
+```text
+/agent-coding-governance-methodology:session-grounding
+```
 
-## 五步(不跳读、不省略)
+插件健康时，`SessionStart` hook 会自动运行并报告项目状态；本 skill 不会自动点火，也不
+替代 hook。它负责在 hook 定位之后，完成人可见的 grounding 判断。
 
-1. **完整读宪法 + 根规则文件。** 不是跳读。这是不可妥协的原则和"真值在哪"的指针。
-2. **判断本次落在哪个轨道/范围**,加读对应层文档。一个 session 只在一个轨道;跨轨道
-   任务拆成连续多个 session。
-3. **报告这 5 件事,然后等人确认再动手:**
-   - 我落在哪个轨道
-   - `git log` + `git status` 显示的现状
-   - 我**实际读代码**看到的相关结构(不凭印象)
-   - 我打算改的文件清单(具体路径)
-   - 我打算的执行步骤
-4. **改完跑验证脚本。**
-5. **收尾报告 + commit 草稿,等人审批再 commit。**
+## 动手之前
 
-> 转述阶段暴露的偏差,比写完代码再发现便宜一个数量级。读不到真值就直说,不许编。
-> (写技术结论或做不可逆操作前,适用 `truth-first` skill。)
+1. 如果 SessionStart 报告 `BROKEN`、`PARTIALLY_GOVERNED` 或 `DRIFTED`，先运行
+   `acgm doctor`。doctor 未确认健康时，不得声称 ACGM 正常。
+2. 完整阅读 Constitution 和根规则，并沿指针找到当前真值源；不得把根规则本身当成技术
+   事实缓存。
+3. 识别本任务所在 worktree、分支、轨道和范围。一个 Session 只在一个轨道；跨轨道工作
+   拆成明确的连续阶段。
+4. 当下重读代码、配置与 Git 状态。交接、transcript、记忆、compact 摘要或旧报告只是
+   历史证据，永远不是当前代码真值。
+5. 报告以下五项，然后**等人确认再编辑**：
+   - 轨道和范围；
+   - 当前 `git log` 与 `git status`；
+   - 实际阅读当前真值源后看到的相关结构；
+   - 拟修改的准确文件清单；
+   - 执行和验证步骤。
+
+改完运行已声明的检查。收尾时提供报告和 commit 草稿，等人批准后再提交。
+
+## 高风险操作转交 Truth-First
+
+执行已识别的高风险操作前，调用：
+
+```text
+/agent-coding-governance-methodology:truth-first
+```
+
+先做只读取证，再在紧邻工具调用之前的回复中写出四个精确字段：
+
+```text
+ACGM-EVIDENCE: <本 Session 当下来源与观察到的标识符>
+ACGM-CURRENT-STATE: <刚刚读取的状态>
+ACGM-VERIFY-AFTER: <具体后验检查>
+ACGM-ROLLBACK: <恢复方案>
+```
+
+四个字段只是证据，不是授权。PreToolUse hook 仍会要求人批准，并保持后验验证义务。

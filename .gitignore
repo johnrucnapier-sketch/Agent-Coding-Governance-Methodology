@@ -3,3 +3,7 @@ docs/superpowers/
 .DS_Store
 BUILD_BRIEF.md
 PUBLISHING.md
+dist/
+__pycache__/
+*.pyc
+.acgm/

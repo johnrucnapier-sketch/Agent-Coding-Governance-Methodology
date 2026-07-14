@@ -1,0 +1,3 @@
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"tool-source-file","name":"Bash","input":{"command":"ls -la /tmp/acgm-fixture-target"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"tool-source-file","content":"drwxr-xr-x acgm-fixture-target"}]},"toolUseResult":{"stdout":"drwxr-xr-x acgm-fixture-target","stderr":"","interrupted":false,"exitCode":0}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"ACGM-EVIDENCE: current-session listing observed for /tmp/acgm-fixture-target.\nACGM-CURRENT-STATE: /tmp/acgm-fixture-target exists now.\nACGM-VERIFY-AFTER: test ! -e /tmp/acgm-fixture-target\nACGM-ROLLBACK: restore /tmp/acgm-fixture-target from the reviewed backup."}]}}
