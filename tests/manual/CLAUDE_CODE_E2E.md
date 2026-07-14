@@ -2,11 +2,11 @@
 
 This checklist requires a working Claude Code account or official Claude API route.
 It validates the real plugin lifecycle that unit tests cannot simulate. ACGM
-`0.3.0-rc.2` is an unreleased testing candidate and must not be promoted to stable
+`0.3.0-rc.3` is an unreleased testing candidate and must not be promoted to stable
 until this checklist passes.
 
 本清单需要可用的 Claude Code 账号或官方 Claude API 路径，用于验证单元测试无法模拟的
-真实插件生命周期。ACGM `0.3.0-rc.2` 是尚未发布的测试候选版，未通过本清单之前不得
+真实插件生命周期。ACGM `0.3.0-rc.3` 是尚未发布的测试候选版，未通过本清单之前不得
 升级为稳定版。
 
 ## Safety boundary / 安全边界
@@ -52,7 +52,7 @@ Stable promotion requires at least one full pass on `Claude account` or `officia
 Claude API`. A compatible third-party endpoint may be recorded as an additional
 compatibility observation, not substituted for that gate. Use a current, working
 Claude Code and record its actual version; preflight plus live E2E, not an unsupported
-hard-coded minimum, determine this candidate's compatibility. RC2 also defines one
+hard-coded minimum, determine this candidate's compatibility. RC3 also defines one
 controlled Windows testing profile: **Windows 10/11 + Git for Windows/Git Bash +
 Python 3.10+ + effective `CLAUDE_CODE_USE_POWERSHELL_TOOL=0`**. A Windows pass must
 use that exact profile and remains candidate evidence until this entire checklist is
@@ -61,7 +61,7 @@ unverified; neither counts as a supported Windows result.
 
 稳定版至少需要一次 `Claude account` 或 `official Claude API` 的完整通过。第三方兼容
 接口可以作为附加兼容性观察，但不能替代该门槛。使用当前可用的 Claude Code 并记录实际
-版本；兼容性由 preflight 和真实 E2E 决定，不使用缺乏证据的硬编码最低版本。RC2 还定义
+版本；兼容性由 preflight 和真实 E2E 决定，不使用缺乏证据的硬编码最低版本。RC3 还定义
 一个受控 Windows 测试 profile：**Windows 10/11 + Git for Windows/Git Bash + Python
 3.10+ + 有效的 `CLAUDE_CODE_USE_POWERSHELL_TOOL=0`**。Windows 通过必须使用这个准确
 profile，并且在真机完整跑完本清单前仍只是候选证据。Native PowerShell hooks 不受支持，
@@ -129,15 +129,40 @@ find acgm-e2e-delete-me -maxdepth 2 -type f -print
 
 Use the release source under test:
 
-The pinned GitHub command below is valid only after the `v0.3.0-rc.2` tag is actually
+The pinned GitHub command below is valid only after the `v0.3.0-rc.3` tag is actually
 published. Before publication, use the reviewed local candidate source, record its
 exact commit, and mark the GitHub-install path **BLOCKED** rather than pretending the
-tag exists. / 下列固定 GitHub 命令只有在 `v0.3.0-rc.2` tag 实际发布后才有效。发布前请
+tag exists. / 下列固定 GitHub 命令只有在 `v0.3.0-rc.3` tag 实际发布后才有效。发布前请
 使用已审查的本地候选源码并记录准确 commit；GitHub 安装路径应记 **BLOCKED**，不得假装
 tag 已存在。
 
+For the current unpublished candidate, clone the exact test branch if a reviewed
+checkout is not already present, then run the conservative installer. On Windows Git
+Bash:
+
 ```bash
-claude plugin marketplace add https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology.git#v0.3.0-rc.2
+git clone --single-branch --branch codex/acgm-v3-rc3-installer \
+  https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology.git \
+  ACGM-V3-RC3-test
+cd ACGM-V3-RC3-test
+py -3 scripts/install.py --dry-run --json
+py -3 scripts/install.py --json
+```
+
+On macOS/Linux, use `python3` in the same commands. The dry-run must report
+`DRY_RUN_READY` without changing Claude state. A fresh install must report `INSTALLED`;
+an exact idempotent rerun may report `ALREADY_INSTALLED_VERIFIED`. Any marketplace,
+scope, version, enabled-state, or cache mismatch is a stop for explicit review, not a
+reason to remove or overwrite it silently. The report must not expose the checkout,
+snapshot, or Claude cache path. / 当前尚未发布的候选版应从上述准确测试分支或已有的 clean、
+已审查 clone 运行保守安装器；macOS/Linux 把 `py -3` 换成 `python3`。dry-run 必须在
+不改变 Claude 状态的情况下报告 `DRY_RUN_READY`；首次安装必须报告 `INSTALLED`，准确
+一致的幂等复跑可报告 `ALREADY_INSTALLED_VERIFIED`。marketplace、scope、版本、启用
+状态或缓存任一不一致都必须停下复核，不得静默删除或覆盖；报告不得泄露 checkout、快照或
+Claude 缓存路径。
+
+```bash
+claude plugin marketplace add https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology.git#v0.3.0-rc.3
 claude plugin install agent-coding-governance-methodology@agent-coding-governance-methodology
 ```
 
@@ -159,7 +184,7 @@ acgm version
 acgm doctor --json
 ```
 
-Expected / 预期：version is exactly `0.3.0-rc.2`; package/runtime is healthy; the new
+Expected / 预期：version is exactly `0.3.0-rc.3`; package/runtime is healthy; the new
 project is `INSTALLED_NOT_BOOTSTRAPPED`, not falsely reported as governed.
 If `command -v acgm` fails inside plugin-enabled Claude Code Bash, mark this step
 **FAIL**; do not substitute a hidden cache path and call the installation flow

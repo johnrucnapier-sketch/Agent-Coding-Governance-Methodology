@@ -47,6 +47,7 @@ EXECUTABLES = {
     "scripts/generate-package-manifest.py",
     "scripts/governance-init.sh",
     "scripts/grounding-inject.sh",
+    "scripts/install.py",
     "scripts/post-tool-truth-first.sh",
     "scripts/preflight.py",
     "scripts/pretool-destructive-bash.sh",

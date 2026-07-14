@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 env:
-  # RC2 Windows coverage is intentionally limited to Git for Windows/Git Bash.
+  # RC3 Windows coverage is intentionally limited to Git for Windows/Git Bash.
   # Native PowerShell hooks are not claimed or exercised by this matrix.
   CLAUDE_CODE_USE_POWERSHELL_TOOL: "0"
 

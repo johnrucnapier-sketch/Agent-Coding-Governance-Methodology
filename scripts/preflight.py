@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from pathlib import Path
 import platform
 import re
 import shutil
@@ -50,6 +51,33 @@ def command_version(argv: Sequence[str]) -> tuple[bool, tuple[int, ...] | None]:
     return completed.returncode == 0, numeric_version(completed.stdout or "")
 
 
+def resolve_claude_executable() -> tuple[Path | None, str | None]:
+    """Resolve a directly executable Claude binary without batch indirection."""
+
+    raw = shutil.which("claude")
+    if not raw:
+        return None, "claude_code_missing_or_unusable"
+    try:
+        candidate = Path(raw).expanduser().resolve(strict=True)
+    except OSError:
+        return None, "claude_code_missing_or_unusable"
+    if not candidate.is_file():
+        return None, "claude_code_missing_or_unusable"
+    if platform.system() != "Windows":
+        return candidate, None
+
+    if candidate.suffix.casefold() in {".cmd", ".bat"}:
+        return None, "windows_claude_batch_launcher_unsupported"
+    try:
+        with candidate.open("rb") as handle:
+            magic = handle.read(2)
+    except OSError:
+        return None, "windows_claude_launcher_unreadable"
+    if magic != b"MZ":
+        return None, "windows_claude_launcher_not_native"
+    return candidate, None
+
+
 def python_launcher() -> tuple[bool, str | None, tuple[int, ...] | None]:
     probe = "import sys; print('.'.join(map(str, sys.version_info[:3])))"
     for kind, argv in (
@@ -85,11 +113,19 @@ def build_report() -> dict[str, Any]:
     if not git_ok:
         errors.append("git_missing_or_unusable")
 
-    claude_ok, claude_version = command_version(["claude", "--version"])
-    if not claude_ok:
-        errors.append("claude_code_missing_or_unusable")
-    elif claude_version is None:
-        warnings.append("claude_code_version_unreadable")
+    claude_executable, claude_launcher_error = resolve_claude_executable()
+    claude_ok = False
+    claude_version = None
+    if claude_launcher_error:
+        errors.append(claude_launcher_error)
+    elif claude_executable is not None:
+        claude_ok, claude_version = command_version(
+            [str(claude_executable), "--version"]
+        )
+        if not claude_ok:
+            errors.append("claude_code_missing_or_unusable")
+        elif claude_version is None:
+            warnings.append("claude_code_version_unreadable")
 
     git_bash_required = system == "Windows"
     git_bash_ok = True
@@ -148,6 +184,11 @@ def build_report() -> dict[str, Any]:
             "claude_code": {
                 "ok": claude_ok,
                 "version": version_text(claude_version),
+                "launcher": (
+                    "native_executable"
+                    if claude_executable is not None and claude_launcher_error is None
+                    else "blocked"
+                ),
             },
             "git_bash": {
                 "required": git_bash_required,

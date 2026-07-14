@@ -8,14 +8,14 @@ behavior on the same version. Commands are shown once and apply to both language
 
 ## 1. Release status / 发布状态
 
-`0.3.0-rc.2` is an unreleased testing candidate. The source version does not imply
+`0.3.0-rc.3` is an unreleased testing candidate. The source version does not imply
 that its Git tag or GitHub prerelease exists. It may be published as a GitHub
 prerelease for real-Claude-Code testing only after this runbook and human review, and
 it must not be promoted or described as stable until
 `tests/manual/CLAUDE_CODE_E2E.md` passes on a working Claude account. The controlled
 Windows profile has not yet completed real-machine E2E.
 
-`0.3.0-rc.2` 是尚未发布的测试候选版；源码版本号不代表对应 Git tag 或 GitHub
+`0.3.0-rc.3` 是尚未发布的测试候选版；源码版本号不代表对应 Git tag 或 GitHub
 prerelease 已存在。只有本流程和人工复核完成后，才可以将它作为 GitHub prerelease 发布
 给真实 Claude Code 测试。在 `tests/manual/CLAUDE_CODE_E2E.md` 未在可用 Claude 账号上
 通过之前，不得升级或描述为稳定版。受控 Windows profile 尚未完成真机 E2E。
@@ -65,14 +65,14 @@ git status --short
 ```
 
 CI must run the first two commands on both Linux and macOS. A green CI result validates
-the local runtime contract. RC2 also adds a `windows-latest` regression job for the
+the local runtime contract. RC3 also adds a `windows-latest` regression job for the
 controlled candidate profile: Windows 10/11 behavior through Git for Windows/Git Bash,
 Python 3.10+, and `CLAUDE_CODE_USE_POWERSHELL_TOOL=0`. CI does not replace real Claude
 Code E2E. Native PowerShell hooks are unsupported, WSL is unverified, and neither may
 be inferred from a green Windows job.
 
 在干净工作树上运行无第三方依赖的回归测试与发布契约检查。CI 必须在 Linux 和 macOS 上
-运行前两条命令。RC2 还为受控候选 profile 增加 `windows-latest` 回归 job：Windows
+运行前两条命令。RC3 还为受控候选 profile 增加 `windows-latest` 回归 job：Windows
 10/11 行为通过 Git for Windows/Git Bash、Python 3.10+ 和
 `CLAUDE_CODE_USE_POWERSHELL_TOOL=0` 测试。CI 通过只证明本地运行时契约，不能代替真实
 Claude Code E2E。Native PowerShell hooks 不受支持，WSL 尚未验证，也不能从绿色 Windows
@@ -94,8 +94,21 @@ py -3 scripts/preflight.py --json
 The result must be `READY_FOR_RC_TEST`. Record only the status and reason codes; the
 preflight does not install, edit settings, initialize a project, or prove live E2E.
 
+For RC3 installer testing, Windows must resolve `claude` to a directly executable
+native `claude.exe`. A legacy `.cmd` or `.bat` launcher is a blocker. The installer
+materializes verified package bytes under `~/.acgm/marketplace-snapshots/`, verifies
+that snapshot before each Claude mutation, and verifies Claude's reported install cache
+afterward. Claude plugin uninstall does not remove these ACGM snapshots; review them
+separately and never delete them as an implicit side effect of uninstall testing.
+
 安装测试前，从准确源码树运行只读 preflight。结果必须是 `READY_FOR_RC_TEST`；只记录状态
 和 reason codes。Preflight 不安装、不改设置、不初始化项目，也不能证明真实 E2E 已通过。
+
+RC3 的 Windows 安装测试必须把 `claude` 解析为可直接执行的原生 `claude.exe`；旧式
+`.cmd` 或 `.bat` launcher 属于阻塞项。安装器把验证过的包字节写入
+`~/.acgm/marketplace-snapshots/`，每次改变 Claude 状态前重新核验，并在安装后核对
+Claude 报告的缓存。Claude 插件卸载不会删除这些 ACGM 快照；应单独审查，不能把删除
+快照当成卸载测试的隐式副作用。
 
 ## 5. Real Claude Code gate / 真实 Claude Code 门
 
@@ -147,31 +160,31 @@ git add -- \
   CASES.md CHANGELOG.md CONTRIBUTING.md EVIDENCE.md LICENSING.md \
   METHODOLOGY.en.md METHODOLOGY.md PACKAGE_MANIFEST.json \
   README.md RELEASING.md VERSION bin hooks scripts skills tests
-git commit -m "feat: ACGM v0.3.0-rc.2 testing candidate"
+git commit -m "feat: ACGM v0.3.0-rc.3 testing candidate"
 ./scripts/build-release.sh
-git tag -a v0.3.0-rc.2 -m "ACGM v0.3.0-rc.2"
+git tag -a v0.3.0-rc.3 -m "ACGM v0.3.0-rc.3"
 git push origin HEAD
-git push origin v0.3.0-rc.2
+git push origin v0.3.0-rc.3
 ```
 
 Create the RC as a prerelease, not a stable release:
 
 ```bash
-gh release create v0.3.0-rc.2 \
+gh release create v0.3.0-rc.3 \
   --prerelease \
-  --title "ACGM v0.3.0-rc.2" \
+  --title "ACGM v0.3.0-rc.3" \
   --notes-file CHANGELOG.md \
-  dist/Agent-Coding-Governance-Methodology-0.3.0-rc.2.tar.gz \
-  dist/Agent-Coding-Governance-Methodology-0.3.0-rc.2.tar.gz.sha256
+  dist/Agent-Coding-Governance-Methodology-0.3.0-rc.3.tar.gz \
+  dist/Agent-Coding-Governance-Methodology-0.3.0-rc.3.tar.gz.sha256
 ```
 
 These commands are a runbook, not authorization. The human reviews the exact diff,
 commit, tag, and release before execution. Until the tag command and push have
-actually succeeded, documentation must continue to call RC2 unreleased and the
-`#v0.3.0-rc.2` install source unavailable.
+actually succeeded, documentation must continue to call RC3 unreleased and the
+`#v0.3.0-rc.3` install source unavailable.
 
 以上命令只是 runbook，不构成授权。执行前由人审查准确 diff、commit、tag 与 release。
-在 tag 创建并成功推送之前，文档必须继续把 RC2 写成尚未发布，`#v0.3.0-rc.2` 安装源也
+在 tag 创建并成功推送之前，文档必须继续把 RC3 写成尚未发布，`#v0.3.0-rc.3` 安装源也
 仍不可用。
 
 ## 8. Fresh install and upgrade smoke tests / 全新安装与升级冒烟
@@ -179,7 +192,7 @@ actually succeeded, documentation must continue to call RC2 unreleased and the
 Test both a clean install and an update from the previously published plugin:
 
 ```bash
-claude plugin marketplace add https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology.git#v0.3.0-rc.2
+claude plugin marketplace add https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology.git#v0.3.0-rc.3
 claude plugin install agent-coding-governance-methodology@agent-coding-governance-methodology
 claude plugin marketplace update agent-coding-governance-methodology
 claude plugin update agent-coding-governance-methodology@agent-coding-governance-methodology
@@ -197,7 +210,7 @@ acgm version
 acgm doctor --strict
 ```
 
-The pinned marketplace command is valid only after `v0.3.0-rc.2` is published. Before
+The pinned marketplace command is valid only after `v0.3.0-rc.3` is published. Before
 that, a local-source smoke test must record the exact commit and must not be reported
 as a successful GitHub install.
 
@@ -208,7 +221,7 @@ does not promise an `acgm` PATH entry in an ordinary login shell; a repository c
 uses `./bin/acgm`. Verify that hook events and `acgm report` resolve the same official
 plugin-data directory.
 
-固定 marketplace 命令只在 `v0.3.0-rc.2` 发布后有效。此前的本地源码冒烟必须记录准确
+固定 marketplace 命令只在 `v0.3.0-rc.3` 发布后有效。此前的本地源码冒烟必须记录准确
 commit，不得写成 GitHub 安装成功。命令通过插件已启用的 Claude Code Bash 运行；Windows
 下必须是 `CLAUDE_CODE_USE_POWERSHELL_TOOL=0` 的受控 Git for Windows/Git Bash profile。
 插件不承诺普通 login shell 具有 `acgm` PATH；仓库 clone 使用 `./bin/acgm`。同时确认

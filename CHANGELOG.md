@@ -3,6 +3,41 @@
 All notable ACGM changes are recorded here. The plugin ID remains
 `agent-coding-governance-methodology@agent-coding-governance-methodology`.
 
+## [0.3.0-rc.3] — Unreleased
+
+Unreleased testing candidate. RC3 has a new version identity because Claude Code uses
+the explicit plugin version as its cache key; reusing RC2 after changing the package
+could leave testers on stale code. This entry does not mean that `v0.3.0-rc.3` or a
+GitHub prerelease has been published.
+
+### Added
+
+- A conservative one-command `scripts/install.py` path for a fresh user-scope install
+  from a reviewed local clone, with stable JSON output and a true no-mutation dry-run.
+- Exact Git-index/manifest inventory checks, a persistent content-addressed verified
+  snapshot, explicit user-scope declaration checks, and post-install cache-byte proof.
+
+### Changed
+
+- The installer uses only fixed-argv Claude CLI mutations, never edits settings
+  directly, never replaces a conflicting marketplace, excludes ignored/untracked
+  checkout files, and treats an existing plugin as current only after exact scope,
+  version, enabled-state, source, and cache verification.
+- Installer reports replace the private checkout path with a stable token so shared
+  diagnostics do not expose the local user directory.
+- Windows installer preflight accepts a native `claude.exe` and rejects legacy batch
+  launchers instead of relying on implicit `cmd.exe` parsing.
+
+### Fixed
+
+- Windows hook input and Git output are decoded as UTF-8 independently of the legacy
+  code page; hook JSON output is ASCII-safe, and scaffold/manifest writes preserve LF.
+
+### Boundaries
+
+- Native PowerShell hook execution remains unsupported; WSL remains unverified.
+- Real-machine Claude Code lifecycle and hook E2E are still required before promotion.
+
 ## [0.3.0-rc.2] — Unreleased
 
 Unreleased testing candidate. This entry documents the RC2 source state; it does not
@@ -124,6 +159,7 @@ Release candidate. This version is not stable until the real-Claude-Code checkli
 - Initial SessionStart injection, generic scaffold, and later v2-era hook experiments
   published without a corresponding package-version increment.
 
+[0.3.0-rc.3]: https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology/compare/v0.3.0-rc.1...HEAD
 [0.3.0-rc.2]: https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology/compare/v0.3.0-rc.1...HEAD
 [0.3.0-rc.1]: https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology/compare/50a642776e361be89fc24640c10a9f9fd742d8f0...v0.3.0-rc.1
 [0.1.0]: https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology/commits/a558e9fa67565254c3e67810a8c3ec184b857091
@@ -134,6 +170,38 @@ Release candidate. This version is not stable until the real-Claude-Code checkli
 
 ACGM 的重要变更记录在这里。插件 ID 始终保持
 `agent-coding-governance-methodology@agent-coding-governance-methodology`。
+
+## [0.3.0-rc.3] — 尚未发布
+
+测试候选版。Claude Code 把显式插件版本作为缓存键；包内容改变后继续复用 RC2，可能让
+测试者仍运行旧缓存，因此 RC3 使用新的版本身份。本节不代表 `v0.3.0-rc.3` tag 或
+GitHub prerelease 已经发布。
+
+### 新增
+
+- 面向已审查本地 clone 的保守一命令 `scripts/install.py` 首次 user-scope 安装路径，
+  提供稳定 JSON 输出和真正零变更的 dry-run。
+- 对 Git index 与 manifest 做完整文件集合核对，建立持久、按内容寻址的验证快照，明确
+  核对 user-scope 声明，并在安装后验证 Claude 缓存字节。
+
+### 变更
+
+- 安装器的 Claude 变更只使用固定 argv CLI，不直接编辑设置、不替换冲突 marketplace，
+  不把 ignored/untracked 文件带入安装；已有插件只有在 scope、版本、启用状态、来源和
+  缓存全部准确一致后才视为当前版本。
+- 可分享的安装报告用稳定 token 代替私有 checkout 路径，避免泄露本机用户目录。
+- Windows 安装预检只接受原生 `claude.exe`，拒绝旧式 batch launcher，避免依赖隐式
+  `cmd.exe` 解析。
+
+### 修复
+
+- Windows hook 输入与 Git 输出独立于旧代码页按 UTF-8 解码；hook JSON 输出使用
+  ASCII-safe wire，脚手架与 manifest 写入保持 LF。
+
+### 边界
+
+- Native PowerShell hook 仍不受支持；WSL 仍未验证。
+- 提升版本前仍必须完成真实 Claude Code 生命周期与 hook E2E。
 
 ## [0.3.0-rc.2] — 尚未发布
 

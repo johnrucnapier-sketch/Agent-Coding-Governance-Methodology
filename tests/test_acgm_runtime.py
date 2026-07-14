@@ -58,7 +58,7 @@ class RuntimeTestCase(unittest.TestCase):
         for key in ("CLAUDE_CODE_GIT_BASH_PATH", "CLAUDE_CODE_USE_POWERSHELL_TOOL"):
             os.environ.pop(key, None)
         if os.name == "nt":
-            # Windows runtime tests exercise the documented RC2 profile. Tests
+            # Windows runtime tests exercise the documented RC3 profile. Tests
             # that verify settings.json discovery explicitly remove this value.
             os.environ["CLAUDE_CODE_USE_POWERSHELL_TOOL"] = "0"
         self.store = acgm.Store(self.data_dir)

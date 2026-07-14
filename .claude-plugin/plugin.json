@@ -1,7 +1,7 @@
 {
   "name": "agent-coding-governance-methodology",
   "displayName": "ACGM",
-  "version": "0.3.0-rc.2",
+  "version": "0.3.0-rc.3",
   "description": "Drift control for long-horizon Claude Code development: visible, interceptable, reversible, and locally auditable. 长周期 Claude Code 开发漂移控制：可见、可拦截、可回滚、本地可审计。",
   "author": { "name": "johnrucnapier-sketch" },
   "homepage": "https://github.com/johnrucnapier-sketch/Agent-Coding-Governance-Methodology",
