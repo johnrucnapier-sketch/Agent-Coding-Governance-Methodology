@@ -25,8 +25,9 @@ SPEC.loader.exec_module(installer)
 
 
 REVISION = "a" * 40
-CLAUDE = Path("/native/claude")
-SNAPSHOT = Path("/private/acgm/verified-snapshot")
+FIXTURE_ROOT = Path(tempfile.gettempdir()).resolve() / "acgm-installer-fixture"
+CLAUDE = FIXTURE_ROOT / ("claude.exe" if os.name == "nt" else "claude")
+SNAPSHOT = FIXTURE_ROOT / "verified-snapshot"
 
 
 def ready_report() -> dict[str, object]:
@@ -708,6 +709,7 @@ class SourceCaptureTests(unittest.TestCase):
                 )
                 for argv in (
                     ["git", "init", "-q"],
+                    ["git", "config", "core.autocrlf", "false"],
                     ["git", "config", "user.name", "ACGM Test"],
                     ["git", "config", "user.email", "acgm-test@example.invalid"],
                     ["git", "add", "."],
@@ -775,6 +777,7 @@ class SourceCaptureTests(unittest.TestCase):
             )
             for argv in (
                 ["git", "init", "-q"],
+                ["git", "config", "core.autocrlf", "false"],
                 ["git", "config", "user.name", "ACGM Test"],
                 ["git", "config", "user.email", "acgm-test@example.invalid"],
                 ["git", "add", "."],
@@ -879,6 +882,7 @@ class SourceCaptureTests(unittest.TestCase):
                 )
                 for argv in (
                     ["git", "init", "-q"],
+                    ["git", "config", "core.autocrlf", "false"],
                     ["git", "config", "user.name", "ACGM Test"],
                     ["git", "config", "user.email", "acgm-test@example.invalid"],
                     ["git", "add", "."],
