@@ -12,7 +12,6 @@ import argparse
 import collections
 from contextlib import contextmanager
 import datetime as dt
-import fcntl
 import hashlib
 import hmac
 import json
@@ -28,6 +27,16 @@ import tempfile
 import uuid
 from typing import Any, Iterable
 
+try:  # Unix advisory locks.
+    import fcntl as _fcntl
+except ImportError:  # pragma: no cover - exercised by Windows CI.
+    _fcntl = None
+
+try:  # Windows byte-range locks.
+    import msvcrt as _msvcrt
+except ImportError:  # pragma: no cover - exercised by POSIX CI.
+    _msvcrt = None
+
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_ID = "agent-coding-governance-methodology@agent-coding-governance-methodology"
@@ -39,6 +48,68 @@ GATE_MARKERS = (
     "ACGM-VERIFY-AFTER:",
     "ACGM-ROLLBACK:",
 )
+
+
+def restrict_descriptor(descriptor: int, mode: int = 0o600) -> None:
+    """Apply best-effort descriptor permissions without requiring Unix APIs.
+
+    ``os.fchmod`` was not available on Windows before Python 3.13. The plugin's
+    Windows Git Bash candidate supports Python 3.10+, so permissions must never
+    be the reason the runtime crashes. Windows access remains governed by the
+    user's profile ACL; POSIX keeps the explicit restrictive mode.
+    """
+
+    fchmod = getattr(os, "fchmod", None)
+    if os.name == "nt":
+        if not callable(fchmod):
+            return
+        try:
+            fchmod(descriptor, mode)
+        except OSError:
+            # Windows 3.10-3.12 lack fd chmod, and later Windows versions map
+            # modes to limited ACL/read-only semantics. Preflight reports that
+            # this RC does not yet attest an equivalent Windows DACL guarantee.
+            return
+    else:
+        if not callable(fchmod):
+            raise OSError("fchmod unavailable on POSIX runtime")
+        fchmod(descriptor, mode)
+
+
+@contextmanager
+def exclusive_file_lock(path: Path) -> Iterable[None]:
+    """Serialize state updates with stdlib-only POSIX or Windows locks."""
+
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    descriptor = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+    restrict_descriptor(descriptor)
+    locked = False
+    try:
+        if _fcntl is not None:
+            _fcntl.flock(descriptor, _fcntl.LOCK_EX)
+        elif _msvcrt is not None:  # pragma: no branch - platform exclusive.
+            # msvcrt.locking locks from the current offset and needs a real byte.
+            if os.fstat(descriptor).st_size == 0:
+                os.write(descriptor, b"\0")
+                os.fsync(descriptor)
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            _msvcrt.locking(descriptor, _msvcrt.LK_LOCK, 1)
+        else:  # No supported lock primitive means state cannot be trusted.
+            raise OSError("no supported file-lock implementation")
+        locked = True
+        yield
+    finally:
+        if locked:
+            try:
+                if _fcntl is not None:
+                    _fcntl.flock(descriptor, _fcntl.LOCK_UN)
+                elif _msvcrt is not None:
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    _msvcrt.locking(descriptor, _msvcrt.LK_UNLCK, 1)
+            finally:
+                os.close(descriptor)
+        else:
+            os.close(descriptor)
 
 
 def read_version() -> str:
@@ -56,15 +127,21 @@ def utc_now() -> str:
 
 
 def json_print(value: Any) -> None:
-    print(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+    # Hook stdout is a JSON wire protocol, not terminal prose.  ASCII escapes
+    # keep it decodable even when Windows Python inherits a legacy code page
+    # while preserving the exact Unicode value after JSON decoding.
+    print(json.dumps(value, ensure_ascii=True, separators=(",", ":")))
 
 
 def read_hook_input() -> dict[str, Any]:
     try:
-        raw = sys.stdin.read()
+        # Claude/Git Bash send hook JSON as UTF-8.  Reading ``sys.stdin``
+        # directly on Windows can apply the active ANSI code page instead.
+        buffer = getattr(sys.stdin, "buffer", None)
+        raw = buffer.read().decode("utf-8") if buffer is not None else sys.stdin.read()
         value = json.loads(raw) if raw.strip() else {}
         return value if isinstance(value, dict) else {}
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return {}
 
 
@@ -73,14 +150,18 @@ def run_git(root: Path, *args: str) -> str:
         result = subprocess.run(
             ["git", "-C", str(root), *args],
             check=False,
-            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             timeout=3,
         )
     except (OSError, subprocess.TimeoutExpired):
         return ""
-    return result.stdout.strip() if result.returncode == 0 else ""
+    if result.returncode != 0:
+        return ""
+    try:
+        return result.stdout.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return ""
 
 
 def resolve_project_root(data: dict[str, Any] | None = None, explicit: str | None = None) -> Path:
@@ -121,6 +202,83 @@ def get_data_dir() -> Path:
         return Path(configured).expanduser()
     config_root = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))).expanduser()
     return config_root / "plugins" / "data" / PLUGIN_DATA_KEY
+
+
+def effective_claude_env(name: str) -> str | None:
+    """Return one Claude environment setting without exposing other config.
+
+    Claude normally exports ``settings.json`` ``env`` entries to child
+    processes. Reading the same single value here also makes an interactive
+    ``acgm doctor`` useful before Claude Code has started.
+    """
+
+    if name in os.environ:
+        return os.environ[name]
+    config_root = Path(
+        os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))
+    ).expanduser()
+    try:
+        settings = json.loads((config_root / "settings.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    configured = settings.get("env") if isinstance(settings, dict) else None
+    value = configured.get(name) if isinstance(configured, dict) else None
+    return value if isinstance(value, str) else None
+
+
+def _git_bash_executable(path_value: str, *, explicitly_configured: bool) -> bool:
+    """Validate a Git for Windows shell path, excluding the WSL launcher."""
+
+    if not path_value.strip():
+        return False
+    candidate = Path(os.path.expandvars(path_value.strip().strip('"'))).expanduser()
+    if not candidate.is_file():
+        return False
+    normalized = str(candidate).replace("\\", "/").casefold()
+    basename = candidate.name.casefold()
+    if basename not in {"bash", "bash.exe", "sh", "sh.exe"}:
+        return False
+    if "/windows/system32/" in normalized:
+        return False
+    if explicitly_configured:
+        return basename in {"bash", "bash.exe"}
+    return "/git/" in normalized or bool(
+        re.match(r"^(?:mingw|msys)", os.environ.get("MSYSTEM", ""), re.I)
+    )
+
+
+def windows_git_bash_status() -> tuple[bool, str]:
+    """Return availability and a non-sensitive reason code for Git Bash."""
+
+    configured = effective_claude_env("CLAUDE_CODE_GIT_BASH_PATH")
+    if configured is not None:
+        if _git_bash_executable(configured, explicitly_configured=True):
+            return True, "configured_path"
+        return False, "configured_path_invalid"
+
+    common_roots = [
+        os.environ.get("ProgramFiles"),
+        os.environ.get("ProgramFiles(x86)"),
+        os.environ.get("LocalAppData"),
+    ]
+    common_paths: list[Path] = []
+    for index, root_value in enumerate(common_roots):
+        if not root_value:
+            continue
+        root = Path(root_value)
+        if index < 2:
+            common_paths.append(root / "Git" / "bin" / "bash.exe")
+        else:
+            common_paths.append(root / "Programs" / "Git" / "bin" / "bash.exe")
+    for candidate in common_paths:
+        if _git_bash_executable(str(candidate), explicitly_configured=False):
+            return True, "standard_install"
+
+    for command in ("bash", "sh"):
+        resolved = shutil.which(command)
+        if resolved and _git_bash_executable(resolved, explicitly_configured=False):
+            return True, "path_lookup"
+    return False, "not_found"
 
 
 class Store:
@@ -228,19 +386,16 @@ class Store:
             if isinstance(value, str) and ("/" in value or "\\" in value or "://" in value):
                 raise ValueError(f"unsafe ledger value for {key}")
         line = json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
-        fd = os.open(self.root / "events.jsonl", os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
-        try:
-            os.fchmod(fd, 0o600)
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            remaining = memoryview(line.encode("utf-8"))
-            while remaining:
-                written = os.write(fd, remaining)
-                if written <= 0:
-                    raise OSError("short event ledger write")
-                remaining = remaining[written:]
-        finally:
+        with exclusive_file_lock(self.root / "locks" / "events.lock"):
+            fd = os.open(self.root / "events.jsonl", os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
             try:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+                restrict_descriptor(fd)
+                remaining = memoryview(line.encode("utf-8"))
+                while remaining:
+                    written = os.write(fd, remaining)
+                    if written <= 0:
+                        raise OSError("short event ledger write")
+                    remaining = remaining[written:]
             finally:
                 os.close(fd)
         return event_id
@@ -248,12 +403,9 @@ class Store:
     def events(self) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []
         try:
-            with (self.root / "events.jsonl").open(encoding="utf-8") as handle:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
-                try:
+            with exclusive_file_lock(self.root / "locks" / "events.lock"):
+                with (self.root / "events.jsonl").open(encoding="utf-8") as handle:
                     lines = handle.read().splitlines()
-                finally:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
         except OSError:
             return result
         for line in lines:
@@ -311,19 +463,8 @@ class Store:
     def obligations_lock(self, session_id: str) -> Iterable[None]:
         """Serialize per-session obligation updates across parallel hooks."""
         self.ensure()
-        directory = self.root / "locks"
-        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        lock_path = directory / f"{session_id}.lock"
-        descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
-        try:
-            os.fchmod(descriptor, 0o600)
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
+        with exclusive_file_lock(self.root / "locks" / f"{session_id}.lock"):
             yield
-        finally:
-            try:
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
-            finally:
-                os.close(descriptor)
 
     def load_obligations(self, session_id: str) -> list[dict[str, Any]]:
         try:
@@ -380,6 +521,7 @@ def package_integrity() -> tuple[list[str], list[str]]:
         "hooks/hooks.json",
         "scripts/acgm-hook.sh",
         "scripts/acgm_runtime.py",
+        "scripts/preflight.py",
         "bin/acgm",
         "skills/session-grounding/SKILL.md",
         "skills/truth-first/SKILL.md",
@@ -388,10 +530,11 @@ def package_integrity() -> tuple[list[str], list[str]]:
     for relative in required:
         if not (PLUGIN_ROOT / relative).is_file():
             errors.append(f"missing:{relative}")
-    for relative in ("scripts/acgm-hook.sh", "scripts/acgm_runtime.py", "bin/acgm"):
-        path = PLUGIN_ROOT / relative
-        if path.exists() and not os.access(path, os.X_OK):
-            errors.append(f"not_executable:{relative}")
+    if os.name != "nt":
+        for relative in ("scripts/acgm-hook.sh", "scripts/acgm_runtime.py", "bin/acgm"):
+            path = PLUGIN_ROOT / relative
+            if path.exists() and not os.access(path, os.X_OK):
+                errors.append(f"not_executable:{relative}")
     try:
         manifest = json.loads((PLUGIN_ROOT / ".claude-plugin/plugin.json").read_text(encoding="utf-8"))
         if manifest.get("version") != ACGM_VERSION:
@@ -434,8 +577,21 @@ def package_integrity() -> tuple[list[str], list[str]]:
             errors.append("package_manifest_invalid")
     else:
         warnings.append("package_manifest_missing")
-    if shutil.which("python3") is None:
-        errors.append("python3_missing")
+    if sys.version_info < (3, 10):
+        errors.append("python_too_old")
+    if os.name == "nt":
+        git_bash_available, _ = windows_git_bash_status()
+        if not git_bash_available:
+            errors.append("windows_git_bash_missing")
+        if effective_claude_env("CLAUDE_CODE_USE_POWERSHELL_TOOL") != "0":
+            errors.append("windows_powershell_tool_must_be_disabled")
+        warnings.extend(
+            [
+                "windows_acl_equivalence_unvalidated",
+                "windows_git_bash_candidate_only",
+                "powershell_native_unsupported",
+            ]
+        )
     return errors, warnings
 
 
@@ -452,13 +608,12 @@ def store_integrity(store: Store, *, scan_obligations: bool = True) -> tuple[lis
         events_path = store.root / "events.jsonl"
         descriptor = os.open(events_path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
         try:
-            os.fchmod(descriptor, 0o600)
+            restrict_descriptor(descriptor)
         finally:
             os.close(descriptor)
         if events_path.stat().st_size:
-            with events_path.open("rb") as handle:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
-                try:
+            with exclusive_file_lock(store.root / "locks" / "events.lock"):
+                with events_path.open("rb") as handle:
                     size = handle.seek(0, os.SEEK_END)
                     offset = max(0, size - 1024 * 1024)
                     handle.seek(offset)
@@ -469,8 +624,6 @@ def store_integrity(store: Store, *, scan_obligations: bool = True) -> tuple[lis
                         value = json.loads(line.decode("utf-8", "strict"))
                         if not isinstance(value, dict) or value.get("schema_version") != EVENT_SCHEMA_VERSION:
                             raise ValueError("invalid event ledger record")
-                finally:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
         if scan_obligations:
             obligations_dir = store.root / "obligations"
@@ -1456,17 +1609,212 @@ def hook_session_end(data: dict[str, Any], store: Store) -> None:
     json_print({})
 
 
-def installed_plugin_record() -> dict[str, Any] | None:
+def installed_plugin_records() -> tuple[list[dict[str, Any]], str | None]:
+    """Return every registered ACGM install record without choosing a winner.
+
+    Multiple scope records are an ambiguous installation state.  Doctor must not
+    silently select the last one and then use a retained ledger event as activation
+    evidence.
+    """
+
     config_root = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))).expanduser()
     path = config_root / "plugins" / "installed_plugins.json"
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-        records = value.get("plugins", {}).get(PLUGIN_ID, [])
-        if isinstance(records, list) and records:
-            return records[-1] if isinstance(records[-1], dict) else None
+    except FileNotFoundError:
+        return [], None
     except (OSError, json.JSONDecodeError):
-        return None
-    return None
+        return [], "installed_plugin_registry_unreadable"
+    if not isinstance(value, dict):
+        return [], "installed_plugin_registry_invalid"
+    plugins = value.get("plugins")
+    if not isinstance(plugins, dict):
+        return [], "installed_plugin_registry_invalid"
+    records = plugins.get(PLUGIN_ID, [])
+    if not isinstance(records, list) or not all(
+        isinstance(record, dict) for record in records
+    ):
+        return [], "installed_plugin_records_invalid"
+    return [dict(record) for record in records], None
+
+
+def installed_plugin_record() -> dict[str, Any] | None:
+    """Return the sole install record, or ``None`` for absent/ambiguous state."""
+
+    records, error = installed_plugin_records()
+    return records[0] if error is None and len(records) == 1 else None
+
+
+def running_from_source_checkout() -> bool:
+    """Return whether this runtime is executing from a Git working tree."""
+
+    return (PLUGIN_ROOT / ".git").exists()
+
+
+def registered_install_matches_running_source(record: dict[str, Any] | None) -> bool:
+    """Compare the registered install root without exposing it in diagnostics."""
+
+    if not record:
+        return False
+    raw_path = record.get("installPath")
+    if not isinstance(raw_path, str) or not raw_path:
+        return False
+    try:
+        return Path(raw_path).expanduser().resolve(strict=True) == PLUGIN_ROOT.resolve(
+            strict=True
+        )
+    except OSError:
+        return False
+
+
+def plugin_enabled_declaration(project_root: Path) -> tuple[bool, str | None]:
+    """Resolve the explicit ACGM enable declaration for this project.
+
+    Installed-plugin records do not contain the current enable flag.  Read the
+    documented user, project, and project-local settings layers in increasing
+    precedence and fail closed on malformed values.  This proves only a settings
+    declaration, not that a live Claude surface loaded the plugin.
+    """
+
+    config_root = Path(
+        os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))
+    ).expanduser()
+    settings_paths = (
+        config_root / "settings.json",
+        project_root / ".claude" / "settings.json",
+        project_root / ".claude" / "settings.local.json",
+    )
+    enabled: bool | None = None
+    for path in settings_paths:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
+        except (OSError, json.JSONDecodeError):
+            return False, "plugin_enable_settings_unreadable"
+        if not isinstance(payload, dict):
+            return False, "plugin_enable_settings_invalid"
+        declarations = payload.get("enabledPlugins")
+        if declarations is None:
+            continue
+        if not isinstance(declarations, dict):
+            return False, "plugin_enable_settings_invalid"
+        if PLUGIN_ID not in declarations:
+            continue
+        value = declarations[PLUGIN_ID]
+        if not isinstance(value, bool):
+            return False, "plugin_enable_declaration_invalid"
+        enabled = value
+    if enabled is not True:
+        return False, "plugin_not_explicitly_enabled_for_project"
+    return True, None
+
+
+def installation_registration_status(
+    records: list[dict[str, Any]],
+    *,
+    registry_error: str | None,
+    project_root: Path,
+) -> dict[str, Any]:
+    """Build fail-closed registration prerequisites for historical evidence."""
+
+    record = records[0] if len(records) == 1 else None
+    errors: list[str] = []
+    if registry_error:
+        errors.append(registry_error)
+    if len(records) > 1:
+        errors.append("multiple_installed_plugin_records")
+    if record is not None:
+        if record.get("scope") not in {"user", "project", "local"}:
+            errors.append("installed_plugin_scope_invalid")
+        if record.get("version") != ACGM_VERSION:
+            errors.append("installed_version_differs_from_running_source")
+        if record.get("errors") not in (None, False, "", [], {}):
+            errors.append("installed_plugin_reports_errors")
+        if not registered_install_matches_running_source(record):
+            errors.append("installed_plugin_path_differs_from_running_source")
+    enabled, enabled_error = plugin_enabled_declaration(project_root)
+    if enabled_error:
+        errors.append(enabled_error)
+    return {
+        "registered": bool(records),
+        "record_count": len(records),
+        "installed_version": record.get("version") if record else None,
+        "installed_commit": record.get("gitCommitSha") if record else None,
+        "running_version": ACGM_VERSION,
+        "source_mode": running_from_source_checkout(),
+        "running_source_matches_registered_install": bool(
+            record and registered_install_matches_running_source(record)
+        ),
+        "explicitly_enabled_for_project": enabled,
+        "registration_consistent": bool(record) and not errors,
+        "error_codes": sorted(set(errors)),
+    }
+
+
+def session_start_activation_evidence(
+    store: Store,
+    *,
+    project_id: str,
+    installation: dict[str, Any],
+    storage_errors: list[str],
+) -> dict[str, Any]:
+    """Report narrowly scoped evidence that SessionStart ran for this version.
+
+    A health ledger record proves only that the current ACGM version's
+    ``SessionStart`` hook wrote that record. It does not prove that any other
+    hook event, Claude surface, or project-governance state is working.
+    """
+
+    evidence = {
+        "status": "CURRENT_VERSION_SESSION_START_NOT_OBSERVED",
+        "evidence_scope": "historical_session_start_health_event_only",
+        "current_version_session_start_observed": False,
+        "current_project_session_start_observed": False,
+        "historical_observation_only": True,
+        "sufficient_for_active_verified": False,
+        "latest_observed_at": None,
+        "current_project_observed_at": None,
+    }
+    if storage_errors:
+        evidence["status"] = "EVIDENCE_UNAVAILABLE"
+        return evidence
+    if installation.get("source_mode"):
+        evidence["status"] = "SOURCE_CHECKOUT_NOT_RUNTIME_PROOF"
+        return evidence
+    if not installation.get("registration_consistent"):
+        evidence["status"] = "CURRENT_INSTALLATION_NOT_CONFIRMED"
+        return evidence
+
+    installed_version = installation.get("installed_version")
+    matching_events: list[dict[str, Any]] = []
+    for event in store.events():
+        if (
+            event.get("acgm_version") == installed_version
+            and event.get("event_type") == "health"
+            and event.get("initiator") == "acgm_hook"
+            and event.get("phase") == "session_start"
+            and event.get("rule_id") == "runtime.health"
+            and event.get("action") == "checked"
+            and event.get("outcome") == "visible"
+            and isinstance(event.get("timestamp"), str)
+            and bool(event.get("timestamp"))
+        ):
+            matching_events.append(event)
+
+    if not matching_events:
+        return evidence
+
+    evidence["status"] = "HISTORICAL_CURRENT_VERSION_SESSION_START_OBSERVED"
+    evidence["current_version_session_start_observed"] = True
+    evidence["latest_observed_at"] = matching_events[-1]["timestamp"]
+    project_events = [
+        event for event in matching_events if event.get("project_id") == project_id
+    ]
+    if project_events:
+        evidence["current_project_session_start_observed"] = True
+        evidence["current_project_observed_at"] = project_events[-1]["timestamp"]
+    return evidence
 
 
 def continuity_status() -> dict[str, Any]:
@@ -1518,17 +1866,20 @@ def doctor_report(project: str | None, update: bool = True) -> dict[str, Any]:
     storage_errors, storage_warnings = store_integrity(store)
     errors.extend(storage_errors)
     warnings.extend(storage_warnings)
-    record = installed_plugin_record()
-    install = {
-        "registered": bool(record),
-        "installed_version": record.get("version") if record else None,
-        "installed_commit": record.get("gitCommitSha") if record else None,
-        "running_version": ACGM_VERSION,
-        "source_mode": (PLUGIN_ROOT / ".git").exists(),
-    }
-    if record and record.get("version") != ACGM_VERSION:
-        warnings.append("installed_version_differs_from_running_source")
+    records, registry_error = installed_plugin_records()
+    install = installation_registration_status(
+        records,
+        registry_error=registry_error,
+        project_root=root,
+    )
+    warnings.extend(install["error_codes"])
     ledger_writable = not storage_errors
+    activation = session_start_activation_evidence(
+        store,
+        project_id=project_id,
+        installation=install,
+        storage_errors=storage_errors,
+    )
     return {
         "acgm_version": ACGM_VERSION,
         "project_id": project_id,
@@ -1541,6 +1892,7 @@ def doctor_report(project: str | None, update: bool = True) -> dict[str, Any]:
             "ledger_writable": ledger_writable,
             "python": sys.version.split()[0],
         },
+        "activation": activation,
         "components": components,
         "continuity": continuity_status(),
     }
@@ -1563,6 +1915,12 @@ def command_doctor(args: argparse.Namespace) -> int:
             + (f"registered {install['installed_version']}" if install["registered"] else "not registered in installed_plugins.json")
             + f"; running {install['running_version']}"
         )
+        activation = report["activation"]
+        print(
+            "Activation: "
+            f"{activation['status']} "
+            "(historical SessionStart health event only; never sufficient by itself for ACTIVE_VERIFIED)"
+        )
         runtime = report["runtime"]
         print(f"Runtime: {'HEALTHY' if runtime['healthy'] else 'BROKEN'}  Ledger: {'writable' if runtime['ledger_writable'] else 'unwritable'}")
         print("Project components:")
@@ -1581,17 +1939,149 @@ def command_doctor(args: argparse.Namespace) -> int:
     return 2 if broken else (1 if args.strict and attention else 0)
 
 
+AGENTS_SCAFFOLD = """# Agent governance / agent 治理约束
+
+This project uses agent-coding-governance. The rules below are non-negotiable and
+apply to every session. Read and follow them before doing anything.
+
+本项目启用 agent-coding-governance。以下规则不可妥协,适用于每个 session。
+动手前先读并遵守。
+
+## Before acting / 动手前:grounding(5 steps / 五步)
+
+1. Read `CONSTITUTION.md` + the root rules in full — not skim. /
+   完整读 `CONSTITUTION.md` + 根规则,不跳读。
+2. Identify which track / scope this session is in; load that layer's docs. /
+   判断本次落在哪个轨道/范围,加读对应层文档。
+3. Report these 5, then WAIT for human confirmation before acting: which track;
+   `git log` + `git status`; structure seen by actually reading code (not memory);
+   exact file list you will change; the steps you will take. /
+   报告这 5 项后等人确认再动手:落在哪个轨道;`git log`+`git status`;实际读代码
+   看到的结构(不凭印象);要改的文件清单;打算的执行步骤。
+4. After changes, run the verification scripts. / 改完跑验证脚本。
+5. Closing report + commit draft — wait for human approval before committing. /
+   收尾报告 + commit 草稿,等人审批再 commit。
+
+## Before any technical conclusion or irreversible action / 写结论或不可逆操作前:truth-first
+
+- Every claim carries `file:line` from grep/reading code. No "I think / usually /
+  I recall". If you cannot read a truth source, say so — never guess. /
+  每条结论带 grep/读码得到的 `文件:行号`。禁"我觉得/通常/我记得"。读不到真值就直说,不许编。
+- A summary is never code-truth: never inherit a code fact from a summary,
+  handoff, or memory layer — read it from the code now. /
+  摘要永不作为代码真值:不从摘要/交接/记忆层继承代码事实——当下从代码读。
+- Before destructive ops: list what is affected + write a rollback + quote the
+  human's authorization verbatim. /
+  破坏性操作前:列影响面 + 写回滚 + 原文引用人的授权。
+- Before a high-risk Bash retry, use the exact four fields required by the ACGM
+  gate: `ACGM-EVIDENCE:`, `ACGM-CURRENT-STATE:`, `ACGM-VERIFY-AFTER:`, and
+  `ACGM-ROLLBACK:`. The hook denies missing evidence before asking the human. /
+  重试高风险 Bash 前,按 ACGM 门控准确填写四个字段;缺证据时 hook 会先拒绝,不会把
+  不完整操作直接交给人批准。
+
+## Scope / 范围
+
+Default rule: only content needed for the software to be built / shipped / run
+belongs here; business / strategy / non-software planning is OUT. This criterion
+is a default — redefine it for your project if needed, but keep it explicit. /
+默认判据:只有"为软件能开发/上线/运行"的内容属于这里;经营/战略/与软件无关的
+规划 = OUT。此判据是默认值——需要可按项目重定义,但必须显式。
+
+> Full methodology: see the agent-coding-governance-methodology repo
+> (METHODOLOGY.md). Full setup is human-driven (governance-bootstrap / §12). /
+> 完整方法论见 agent-coding-governance-methodology 仓库;完整搭建是人驱动的。
+"""
+
+
+CLAUDE_SCAFFOLD = """# Root rules — meta + pointers, never facts / 根规则 — 元规则+指针,绝不放事实
+
+This project uses agent-coding-governance.
+
+- If the Claude Code plugin is installed, its lifecycle hooks report the project
+  state and inject grounding — follow them. Run `acgm doctor` when the state is
+  partial, drifted, or broken. If the plugin is absent, read `AGENTS.md`.
+- Governance constitution: `./CONSTITUTION.md` (humans only).
+- This file holds only meta-rules, pointers, and behavior constraints — never
+  facts that can be re-derived from code (Principle 2).
+
+本项目启用 agent-coding-governance。
+
+- 装了 Claude Code 插件:生命周期 hooks 会报告项目状态并注入 grounding,照做。
+  状态为 partial/drifted/broken 时运行 `acgm doctor`;没装则读 `AGENTS.md`。
+- 治理宪法:`./CONSTITUTION.md`(仅人可改)。
+- 本文件只装元规则、指针、行为约束——绝不写能从代码反推的事实(第 2 原则)。
+"""
+
+
+def create_file_exclusive(path: Path, content: bytes) -> bool:
+    """Create one scaffold file atomically; never follow or replace a path."""
+
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        descriptor = os.open(path, flags, 0o644)
+    except FileExistsError:
+        return False
+    complete = False
+    try:
+        remaining = memoryview(content)
+        while remaining:
+            written = os.write(descriptor, remaining)
+            if written <= 0:
+                raise OSError("short scaffold write")
+            remaining = remaining[written:]
+        os.fsync(descriptor)
+        complete = True
+    finally:
+        try:
+            os.close(descriptor)
+        finally:
+            if not complete:
+                try:
+                    os.unlink(path)
+                except FileNotFoundError:
+                    pass
+    return True
+
+
+def scaffold_project(target: Path) -> tuple[int, int]:
+    template = PLUGIN_ROOT / "templates" / "CONSTITUTION.skeleton.md"
+    if not template.is_file():
+        raise FileNotFoundError(f"constitution template missing: {template}")
+
+    entries = (
+        ("CONSTITUTION.md", template.read_bytes(), "CONSTITUTION.md  (fill every <...> — humans only / 仅人可改)"),
+        ("AGENTS.md", AGENTS_SCAFFOLD.encode("utf-8"), "AGENTS.md  (generic agent-governance directive)"),
+        ("CLAUDE.md", CLAUDE_SCAFFOLD.encode("utf-8"), "CLAUDE.md  (thin pointer)"),
+    )
+    created = 0
+    skipped = 0
+    print(f"agent-coding-governance · scaffold → {target}")
+    print("----------------------------------------------------------------")
+    for filename, content, created_label in entries:
+        path = target / filename
+        if create_file_exclusive(path, content):
+            print(f"  • create / 新建: {created_label}")
+            created += 1
+        else:
+            print(f"  • skip / 跳过 (已存在,未改动): {filename}")
+            skipped += 1
+    print("----------------------------------------------------------------")
+    print(f"Done / 完成: created {created}, skipped {skipped}.")
+    return created, skipped
+
+
 def command_init(args: argparse.Namespace) -> int:
-    """Run the existing non-overwriting scaffold through one stable entry point."""
+    """Create the non-overwriting scaffold without a shell dependency."""
     try:
         target = resolve_project_root(explicit=args.project)
     except (FileNotFoundError, NotADirectoryError) as error:
         print(f"ACGM init: {error}", file=sys.stderr)
         return 2
-    script = PLUGIN_ROOT / "scripts" / "governance-init.sh"
-    result = subprocess.run(["sh", str(script), str(target)], check=False)
-    if result.returncode != 0:
-        return result.returncode
+    try:
+        scaffold_project(target)
+    except OSError as error:
+        print(f"ACGM init: {error}", file=sys.stderr)
+        return 2
     # Record the resulting adoption state, but never rewrite user-owned files.
     report = doctor_report(str(target), update=True)
     print(f"ACGM project state: {report['project_state']}")

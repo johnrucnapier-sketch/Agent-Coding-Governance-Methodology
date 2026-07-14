@@ -7,3 +7,9 @@ dist/
 __pycache__/
 *.pyc
 .acgm/
+
+# Keep only the reviewed project onboarding bridge. Claude Desktop/Code may create
+# local trust, preview, or worktree state under this directory; those bytes must never
+# enter a verified plugin snapshot or make a fresh onboarding checkout look dirty.
+.claude/*
+!.claude/settings.json

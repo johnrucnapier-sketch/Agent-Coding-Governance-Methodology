@@ -7,7 +7,7 @@ It prevents a single incident, a repeated reminder, or an attractive explanation
 from silently becoming a universal rule. Sensitive raw transcripts remain local;
 the public register records only desensitized evidence references and limitations.
 
-**Register review:** 2026-07-12 (ACGM V3 prerelease preparation).
+**Register review:** 2026-07-14 (ACGM V3 RC4 prerelease preparation).
 
 ## Maturity states
 
@@ -35,6 +35,12 @@ do not rewrite away the earlier judgment.
 | E-005 | Repeated governance injection can become semantically ignored | **Predictive** | Design hypothesis; no attributable saturation event has been established | Guide low-noise instrumentation; no fixed trigger-count threshold |
 | E-006 | "Two events within 30 days" is a sufficient clause lifecycle | **Rejected** | The rule had no registry, owner, expiry action, or release gate; elapsed time alone did not decide claim quality | Replaced by maturity states and a release decision |
 | E-007 | Governance outcomes require initiator, pre/post timing, outcome, verification, and false-positive attribution | **Corroborated** | Case 1's corrected mechanism attribution; Case 9 was found by external human audit after the risky chain | Event Ledger activity counts cannot be marketed as wins |
+| E-008 | Downloaded source or a verified plugin record/cache does not prove that the target runtime loaded the hooks | **Observed** | RC3 installer code stopped at configuration/cache verification while reload and `/hooks` remained future steps; a real Desktop installation attempt was reported unusable after download/install | RC4 must expose separate source, configuration, activation, and project-governance stages; a retained SessionStart health event is historical corroboration, not target-surface activation proof |
+| E-009 | A caller-selected surface label must not override stronger Cloud/WSL runtime evidence | **Reproduced** | Pre-RC4 repros returned an automated-ready route when explicit Local/CLI labels contradicted official Cloud or OS-level WSL signals | RC4 fails closed as `SURFACE_SIGNAL_CONFLICT`; unknown surfaces still require an explicit human-selected target |
+| E-010 | A successful planning/source-inspection operation is not a successful installation | **Reproduced** | Pre-RC4 manual UI and dry-run results returned process success while configuration and runtime remained false | RC4 separates `operation_ok`, `ok`, and `ready_for_use`; source-only results cannot set installation success |
+| E-011 | Updating one pinned tag or immutable local snapshot cannot silently migrate to a different release | **Corroborated** | Claude's marketplace contract refreshes the configured source; RC3 content-addressed snapshots remain fixed, and a different RC4 snapshot is a source conflict | Cross-version migration requires explicit authorization, predecessor proof, fixed-scope replacement, postconditions, and rollback; unknown sources remain blocked |
+| E-012 | An extracted GitHub/release archive cannot satisfy a Git-index-bound installer proof | **Corroborated** | Release archives contain package bytes but no `.git` revision/index; the installer intentionally requires both | Archives remain audit/reproducibility assets; automated installation starts from a clean immutable-tag clone |
+| E-013 | User-scope plugin inspection executed from a plugin-declaring project can be contaminated by that project's settings | **Reproduced** | The same marketplace-list probe returned promptly from a neutral directory but stalled when its cwd was the RC4 repository containing the project bridge | All Claude CLI probes and mutations run from a fresh private neutral cwd; repository Git identity is read separately with explicit `git -C` |
 
 ## Release review
 
@@ -56,7 +62,7 @@ Before a stable release, review every entry touched by the release:
 提醒或一个听起来很好的解释,静默升级成通用规则。敏感 raw transcript 留在本机;公开
 登记表只记录脱敏证据引用和限制。
 
-**登记表复审:** 2026-07-12(ACGM V3 预发布准备)。
+**登记表复审:** 2026-07-14(ACGM V3 RC4 预发布准备)。
 
 ## 成熟度状态
 
@@ -83,6 +89,12 @@ Before a stable release, review every entry touched by the release:
 | E-005 | 治理注入反复出现后可能被语义忽略 | **Predictive** | 设计假设;尚无可归因的饱和事件 | 指导低噪声埋点;不设固定触发次数阈值 |
 | E-006 | "两事件 + 30 天"足以构成条款生命周期 | **Rejected** | 旧规则没有登记表、负责人、到期动作或发布门;时间流逝本身不能决定结论质量 | 改由成熟度状态 + 发布决策替代 |
 | E-007 | 治理成效必须记录 initiator、动作前后、结果、验证和误报归因 | **Corroborated** | 案例 1 的机制归因更正;案例 9 是外部人审在风险链发生后发现 | Event Ledger 的活动次数不得包装成战绩 |
+| E-008 | 已下载源码或已验证 plugin 记录/缓存，不等于目标运行时已经加载 hooks | **Observed** | RC3 安装器停在配置/缓存核验，而 reload 与 `/hooks` 仍只是后续步骤；一次真实 Desktop 安装尝试在下载/安装后被报告为不可用 | RC4 必须分别报告源码、配置、激活和项目治理；保留的 SessionStart health 事件只是历史旁证，不是目标 surface 激活证明 |
+| E-009 | 调用者选择的 surface 名称不能覆盖更强的 Cloud/WSL 运行时证据 | **Reproduced** | RC4 修复前，显式 Local/CLI 与官方 Cloud 或 OS 级 WSL 信号矛盾时仍会返回自动 ready | RC4 以 `SURFACE_SIGNAL_CONFLICT` 失败关闭；未知 surface 仍需人显式选择目标 |
+| E-010 | 规划/源码检查操作成功不等于安装成功 | **Reproduced** | RC4 修复前，manual UI 与 dry-run 会返回进程成功，但配置与运行时仍为 false | RC4 分开 `operation_ok`、`ok` 与 `ready_for_use`；只有源码不能设置安装成功 |
+| E-011 | 刷新一个固定 tag 或不可变本地 snapshot，不能静默迁移到另一版本 | **Corroborated** | Claude marketplace 只刷新已配置来源；RC3 内容寻址 snapshot 保持不变，RC4 的不同 snapshot 会形成来源冲突 | 跨版本迁移必须显式授权、证明前任、限定 scope、核验 postcondition 并可回滚；未知来源继续阻断 |
+| E-012 | 解压后的 GitHub/release archive 无法满足绑定 Git index 的安装证据 | **Corroborated** | Release archive 有包字节但没有 `.git` revision/index，而安装器有意同时要求二者 | Archive 仅供审计/复现；自动安装必须从 clean、固定 tag clone 开始 |
+| E-013 | 在声明插件的项目 cwd 中检查 user-scope plugin 状态，会被该项目 settings 污染 | **Reproduced** | 同一 marketplace-list probe 在 neutral 目录快速返回，在含 project bridge 的 RC4 仓库 cwd 中停滞 | 所有 Claude CLI probe 与 mutation 都从新建私有 neutral cwd 运行；仓库 Git 身份另用显式 `git -C` 读取 |
 
 ## 发布复审
 

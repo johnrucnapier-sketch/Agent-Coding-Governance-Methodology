@@ -1,12 +1,14 @@
 #!/bin/sh
-# governance-init.sh — plugin-free scaffolder for agent-coding-governance-methodology.
+# governance-init.sh — POSIX-only plugin-free fallback scaffolder.
 #
 # What this is (honest, per the methodology's own truth-first principle):
-#   This is a SCAFFOLDER, not a runtime. It writes governance files into a target
+#   Windows users should use the pure-Python `acgm init` path instead. This is a
+#   SCAFFOLDER, not a runtime. It writes governance files into a target
 #   project so the discipline is in place from session one.
 #     - Claude Code: prefer the plugin (`/plugin marketplace add ...`); its hooks
 #       detect project state, inject grounding, gate selected high-risk actions,
-#       and keep a local sanitized event ledger. `acgm init` calls this script.
+#       and keep a local sanitized event ledger. `acgm init` provides the same
+#       non-overwriting scaffold through a pure-Python path for portability.
 #     - No plugin / other setups: this writes CONSTITUTION.md + AGENTS.md (a
 #       generic agent-governance directive) + a CLAUDE.md pointer as STATIC files.
 #       Whether the directive is auto-applied depends on whether your agent reads

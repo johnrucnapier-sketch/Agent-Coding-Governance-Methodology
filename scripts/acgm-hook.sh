@@ -12,9 +12,28 @@ if [ -z "${ACGM_DATA_DIR:-}" ] && [ -n "$PLUGIN_DATA" ]; then
   export ACGM_DATA_DIR
 fi
 
+PYTHON_KIND=
 if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+  PYTHON_KIND=python3
+elif command -v python >/dev/null 2>&1 && python -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+  PYTHON_KIND=python
+elif command -v py >/dev/null 2>&1 && py -3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+  PYTHON_KIND=py3
+fi
+
+if [ -n "$PYTHON_KIND" ]; then
   set +e
-  OUTPUT=$(printf '%s' "$INPUT" | python3 "$SELF_DIR/acgm_runtime.py" "hook-$MODE" 2>/dev/null)
+  case "$PYTHON_KIND" in
+    python3)
+      OUTPUT=$(printf '%s' "$INPUT" | python3 "$SELF_DIR/acgm_runtime.py" "hook-$MODE" 2>/dev/null)
+      ;;
+    python)
+      OUTPUT=$(printf '%s' "$INPUT" | python "$SELF_DIR/acgm_runtime.py" "hook-$MODE" 2>/dev/null)
+      ;;
+    py3)
+      OUTPUT=$(printf '%s' "$INPUT" | py -3 "$SELF_DIR/acgm_runtime.py" "hook-$MODE" 2>/dev/null)
+      ;;
+  esac
   STATUS=$?
   set -e
   if [ "$STATUS" -eq 0 ]; then

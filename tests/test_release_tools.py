@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -29,11 +30,11 @@ class PackageManifestTests(unittest.TestCase):
     def test_filesystem_manifest_is_deterministic_and_excludes_local_material(self) -> None:
         with tempfile.TemporaryDirectory(prefix="acgm manifest 中文 ") as temporary:
             root = Path(temporary)
-            (root / "VERSION").write_text("9.8.7-rc.1\n", encoding="utf-8")
-            (root / "alpha.txt").write_text("alpha\n", encoding="utf-8")
+            (root / "VERSION").write_bytes(b"9.8.7-rc.1\n")
+            (root / "alpha.txt").write_bytes(b"alpha\n")
             (root / "目录 with space").mkdir()
             unicode_file = root / "目录 with space" / "内容.txt"
-            unicode_file.write_text("content\n", encoding="utf-8")
+            unicode_file.write_bytes(b"content\n")
             (root / "BUILD_BRIEF.md").write_text("local\n", encoding="utf-8")
             (root / "dist").mkdir()
             (root / "dist" / "old.tar.gz").write_bytes(b"old")
@@ -61,7 +62,7 @@ class PackageManifestTests(unittest.TestCase):
             (root / "payload.txt").write_text("payload\n", encoding="utf-8")
             output = root / "PACKAGE_MANIFEST.json"
             command = [
-                "python3",
+                sys.executable,
                 str(REPO_ROOT / "scripts" / "generate-package-manifest.py"),
                 "--root",
                 str(root),
@@ -70,11 +71,12 @@ class PackageManifestTests(unittest.TestCase):
                 "--output",
                 str(output),
             ]
-            subprocess.run(command, check=True, stdout=subprocess.PIPE, text=True)
-            subprocess.run([*command, "--check"], check=True, stdout=subprocess.PIPE, text=True)
+            subprocess.run(command, check=True, stdout=subprocess.PIPE, encoding="utf-8")
+            subprocess.run([*command, "--check"], check=True, stdout=subprocess.PIPE, encoding="utf-8")
             value = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(value["version"], "1.2.3")
             self.assertIn("payload.txt", value["files"])
+            self.assertNotIn(b"\r\n", output.read_bytes())
 
 
 class ReleaseContractTests(unittest.TestCase):
@@ -89,6 +91,62 @@ class ReleaseContractTests(unittest.TestCase):
         self.assertIn("hook_inventory", results.passed)
         self.assertIn("executable_modes", results.passed)
         self.assertIn("release_path_hygiene", results.passed)
+        self.assertIn("onboarding_bridge", results.passed)
+
+    def test_onboarding_bridge_allows_only_pinned_marketplace_keys(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="acgm onboarding ") as temporary:
+            root = Path(temporary)
+            (root / ".claude").mkdir()
+            for relative in ("AGENTS.md", "CLAUDE.md", "INSTALL.md"):
+                (root / relative).write_text("entry\n", encoding="utf-8")
+            (root / ".claude" / "settings.json").write_text(
+                json.dumps(
+                    {
+                        "extraKnownMarketplaces": {
+                            release_check.PLUGIN_NAME: {
+                                "source": {
+                                    "source": "github",
+                                    "repo": release_check.GITHUB_REPOSITORY,
+                                    "ref": "v1.2.3-rc.4",
+                                }
+                            }
+                        },
+                        "enabledPlugins": {release_check.PLUGIN_ID: True},
+                        "permissions": {"allow": ["Bash(*)"]},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            results = release_check.Results()
+            release_check.check_onboarding_bridge(root, "1.2.3-rc.4", results)
+
+        self.assertIn("onboarding_settings_unsafe_keys", results.errors)
+        self.assertNotIn("onboarding_bridge", results.passed)
+
+    def test_hook_commands_use_quoted_runtime_environment_expansion(self) -> None:
+        value = json.loads((REPO_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        handlers = [
+            handler
+            for groups in value["hooks"].values()
+            for group in groups
+            for handler in group.get("hooks", [])
+        ]
+        self.assertGreater(len(handlers), 0)
+        for handler in handlers:
+            with self.subTest(command=handler.get("command")):
+                self.assertNotIn("args", handler)
+                self.assertNotIn("shell", handler)
+                self.assertNotIn("${CLAUDE_PLUGIN_", handler["command"])
+                self.assertRegex(handler["command"], release_check.HOOK_SHELL_COMMAND)
+
+    def test_shell_launchers_cover_standard_windows_python_names(self) -> None:
+        for relative in ("bin/acgm", "scripts/acgm-hook.sh"):
+            content = (REPO_ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(relative=relative):
+                self.assertIn("command -v python3", content)
+                self.assertIn("command -v python", content)
+                self.assertIn("command -v py", content)
+                self.assertIn("py -3", content)
 
     def test_bilingual_contract_checker_reports_codes_not_document_content(self) -> None:
         with tempfile.TemporaryDirectory(prefix="acgm docs contract ") as temporary:
@@ -105,12 +163,17 @@ class ReleaseContractTests(unittest.TestCase):
             self.assertEqual(results.errors, [])
             self.assertIn("bilingual_contract", results.passed)
 
-    def test_ci_targets_linux_and_macos(self) -> None:
+    def test_ci_targets_linux_macos_and_controlled_windows_profile(self) -> None:
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("ubuntu-latest", workflow)
         self.assertIn("macos-latest", workflow)
+        self.assertIn("windows-latest", workflow)
+        self.assertIn("CLAUDE_CODE_USE_POWERSHELL_TOOL", workflow)
+        self.assertIn("shell: bash", workflow)
         self.assertIn("unittest discover", workflow)
         self.assertIn("release_check.py", workflow)
+        self.assertIn("generate-package-manifest.py --check --source git", workflow)
+        self.assertNotIn("run: python3 ", workflow)
 
 
 if __name__ == "__main__":

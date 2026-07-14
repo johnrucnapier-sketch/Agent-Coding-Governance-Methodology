@@ -55,6 +55,12 @@ class RuntimeTestCase(unittest.TestCase):
         self.environment.start()
         for key in ("CLAUDE_PLUGIN_DATA", "CLAUDE_PROJECT_DIR", "XDG_DATA_HOME"):
             os.environ.pop(key, None)
+        for key in ("CLAUDE_CODE_GIT_BASH_PATH", "CLAUDE_CODE_USE_POWERSHELL_TOOL"):
+            os.environ.pop(key, None)
+        if os.name == "nt":
+            # Windows runtime tests exercise the documented RC4 profile. Tests
+            # that verify settings.json discovery explicitly remove this value.
+            os.environ["CLAUDE_CODE_USE_POWERSHELL_TOOL"] = "0"
         self.store = acgm.Store(self.data_dir)
 
     def tearDown(self) -> None:
@@ -122,6 +128,29 @@ class ProjectAndSessionTests(RuntimeTestCase):
         nested.mkdir(parents=True)
         resolved = acgm.resolve_project_root({"cwd": str(nested)})
         self.assertEqual(resolved, root.resolve())
+
+    def test_run_git_decodes_utf8_output_independent_of_locale(self) -> None:
+        expected = "/tmp/项目 with spaces"
+        completed = subprocess.CompletedProcess(
+            args=["git"], returncode=0, stdout=expected.encode("utf-8") + b"\n"
+        )
+        with mock.patch.object(acgm.subprocess, "run", return_value=completed):
+            self.assertEqual(acgm.run_git(self.base, "rev-parse", "--show-toplevel"), expected)
+
+    def test_hook_json_wire_is_independent_of_windows_code_page(self) -> None:
+        payload = {"cwd": "C:/项目 with spaces", "session_id": "会话"}
+        stream = io.TextIOWrapper(
+            io.BytesIO(json.dumps(payload, ensure_ascii=False).encode("utf-8")),
+            encoding="cp1252",
+        )
+        with mock.patch("sys.stdin", stream):
+            self.assertEqual(acgm.read_hook_input(), payload)
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            acgm.json_print(payload)
+        output.getvalue().encode("ascii")
+        self.assertEqual(json.loads(output.getvalue()), payload)
 
     def test_project_state_lifecycle(self) -> None:
         root = self.make_git_project()
@@ -220,6 +249,105 @@ class ProjectAndSessionTests(RuntimeTestCase):
 
         self.assertLessEqual(len(items), 500)
         self.assertIn("ACGM-VERIFY-AFTER:", acgm.assistant_text(items))
+
+
+class ScaffoldAndPlatformTests(RuntimeTestCase):
+    def test_python_scaffold_is_idempotent_and_never_overwrites(self) -> None:
+        root = self.make_git_project()
+        existing = root / "CLAUDE.md"
+        existing.write_text("human-owned fixture\n", encoding="utf-8")
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            first = acgm.scaffold_project(root)
+            first_bytes = {name: (root / name).read_bytes() for name in ("CONSTITUTION.md", "AGENTS.md", "CLAUDE.md")}
+            second = acgm.scaffold_project(root)
+
+        self.assertEqual(first, (2, 1))
+        self.assertEqual(second, (0, 3))
+        self.assertEqual(existing.read_text(encoding="utf-8"), "human-owned fixture\n")
+        self.assertEqual(
+            first_bytes,
+            {name: (root / name).read_bytes() for name in ("CONSTITUTION.md", "AGENTS.md", "CLAUDE.md")},
+        )
+
+    def test_python_and_posix_fallback_scaffolds_match(self) -> None:
+        python_target = self.base / "python scaffold"
+        shell_target = self.base / "shell scaffold"
+        python_target.mkdir()
+        shell_target.mkdir()
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            acgm.scaffold_project(python_target)
+        subprocess.run(
+            ["sh", str(REPO_ROOT / "scripts" / "governance-init.sh"), str(shell_target)],
+            check=True,
+            encoding="utf-8",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        for name in ("CONSTITUTION.md", "AGENTS.md", "CLAUDE.md"):
+            with self.subTest(name=name):
+                self.assertEqual((python_target / name).read_bytes(), (shell_target / name).read_bytes())
+
+    def test_interrupted_exclusive_create_removes_only_its_partial_file(self) -> None:
+        partial = self.base / "partial.txt"
+        original_write = os.write
+        call_count = 0
+
+        def fail_after_prefix(descriptor, content):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return original_write(descriptor, bytes(content[:1]))
+            raise OSError("fixture interruption")
+
+        with mock.patch.object(acgm.os, "write", side_effect=fail_after_prefix):
+            with self.assertRaises(OSError):
+                acgm.create_file_exclusive(partial, b"fixture content")
+        self.assertFalse(partial.exists())
+
+        existing = self.base / "existing.txt"
+        existing.write_bytes(b"human owned")
+        self.assertFalse(acgm.create_file_exclusive(existing, b"replacement"))
+        self.assertEqual(existing.read_bytes(), b"human owned")
+
+    @unittest.skipIf(os.name == "nt", "POSIX permission error contract")
+    def test_posix_fchmod_failure_is_not_silenced(self) -> None:
+        descriptor = os.open(self.base / "permission.txt", os.O_CREAT | os.O_WRONLY, 0o600)
+        try:
+            with mock.patch.object(acgm.os, "fchmod", side_effect=OSError("fixture")):
+                with self.assertRaises(OSError):
+                    acgm.restrict_descriptor(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def test_git_bash_path_and_powershell_setting_can_come_from_claude_settings(self) -> None:
+        os.environ.pop("CLAUDE_CODE_USE_POWERSHELL_TOOL", None)
+        git_bash = self.base / "Git" / "bin" / "bash.exe"
+        git_bash.parent.mkdir(parents=True)
+        git_bash.write_bytes(b"fixture")
+        self.config_dir.mkdir(parents=True)
+        (self.config_dir / "settings.json").write_text(
+            json.dumps(
+                {
+                    "env": {
+                        "CLAUDE_CODE_GIT_BASH_PATH": str(git_bash),
+                        "CLAUDE_CODE_USE_POWERSHELL_TOOL": "0",
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        self.assertEqual(acgm.effective_claude_env("CLAUDE_CODE_USE_POWERSHELL_TOOL"), "0")
+        self.assertEqual(acgm.windows_git_bash_status(), (True, "configured_path"))
+
+    def test_package_integrity_uses_running_python_not_python3_command_name(self) -> None:
+        with mock.patch.object(acgm.shutil, "which", return_value=None):
+            errors, _ = acgm.package_integrity()
+        self.assertNotIn("python3_missing", errors)
+        self.assertNotIn("python_too_old", errors)
 
 
 class BashGateTests(RuntimeTestCase):
@@ -543,7 +671,8 @@ class WriteAndLedgerTests(RuntimeTestCase):
         ):
             self.assertNotIn(forbidden, ledger)
         mode = stat.S_IMODE((self.data_dir / "events.jsonl").stat().st_mode)
-        self.assertEqual(mode, 0o600)
+        if os.name != "nt":
+            self.assertEqual(mode, 0o600)
 
     def test_ledger_rejects_path_like_enum_values(self) -> None:
         with self.assertRaises(ValueError):
@@ -571,7 +700,7 @@ class WriteAndLedgerTests(RuntimeTestCase):
         result = subprocess.run(
             ["sh", str(wrapper), "pretool-bash"],
             input=json.dumps({"tool_name": "Bash", "tool_input": {"command": "git status"}}),
-            text=True,
+            encoding="utf-8",
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -619,21 +748,213 @@ class DoctorReportAndExportTests(RuntimeTestCase):
             encoding="utf-8",
         )
         (self.config_dir / "settings.json").write_text(
-            json.dumps({"cleanupPeriodDays": 90}), encoding="utf-8"
+            json.dumps(
+                {
+                    "cleanupPeriodDays": 90,
+                    "enabledPlugins": {acgm.PLUGIN_ID: True},
+                }
+            ),
+            encoding="utf-8",
         )
         transcripts = self.config_dir / "projects" / "fixture"
         transcripts.mkdir(parents=True)
         (transcripts / "recent.jsonl").write_text("{}\n", encoding="utf-8")
 
+    def append_session_start_health(self, root: Path, *, version: str) -> None:
+        with mock.patch.object(acgm, "ACGM_VERSION", version):
+            self.store.append_event(
+                project_id=self.store.project_id(root),
+                session_id="ses_0123456789abcdef",
+                event_type="health",
+                initiator="acgm_hook",
+                phase="session_start",
+                rule_id="runtime.health",
+                action="checked",
+                status="healthy",
+                outcome="visible",
+                confidence="high",
+                detail_code="governed",
+            )
+
     def test_doctor_reports_healthy_governed_project(self) -> None:
         root = self.make_governed_project()
         self.configure_healthy_claude_home()
-        report = acgm.doctor_report(str(root), update=False)
+        with mock.patch.object(
+            acgm, "running_from_source_checkout", return_value=True
+        ):
+            report = acgm.doctor_report(str(root), update=False)
         self.assertEqual(report["project_state"], "GOVERNED")
         self.assertTrue(report["installation"]["registered"])
         self.assertEqual(report["installation"]["installed_version"], acgm.ACGM_VERSION)
         self.assertTrue(report["runtime"]["healthy"])
         self.assertEqual(report["continuity"]["status"], "READY")
+        self.assertEqual(
+            report["activation"]["status"],
+            "SOURCE_CHECKOUT_NOT_RUNTIME_PROOF",
+        )
+        self.assertFalse(
+            report["activation"]["current_version_session_start_observed"]
+        )
+
+    def test_doctor_observes_only_current_version_session_start_evidence(self) -> None:
+        root = self.make_governed_project()
+        self.configure_healthy_claude_home()
+        self.append_session_start_health(root, version=acgm.ACGM_VERSION)
+
+        with mock.patch.object(
+            acgm, "running_from_source_checkout", return_value=False
+        ):
+            report = acgm.doctor_report(str(root), update=False)
+
+        activation = report["activation"]
+        self.assertEqual(
+            activation["status"],
+            "HISTORICAL_CURRENT_VERSION_SESSION_START_OBSERVED",
+        )
+        self.assertTrue(activation["current_version_session_start_observed"])
+        self.assertTrue(activation["current_project_session_start_observed"])
+        self.assertTrue(activation["historical_observation_only"])
+        self.assertFalse(activation["sufficient_for_active_verified"])
+        self.assertIsNotNone(activation["latest_observed_at"])
+        self.assertEqual(
+            activation["evidence_scope"],
+            "historical_session_start_health_event_only",
+        )
+
+    def test_doctor_does_not_promote_retained_event_when_plugin_is_disabled(self) -> None:
+        root = self.make_governed_project()
+        self.configure_healthy_claude_home()
+        settings_path = self.config_dir / "settings.json"
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        settings["enabledPlugins"][acgm.PLUGIN_ID] = False
+        settings_path.write_text(json.dumps(settings), encoding="utf-8")
+        self.append_session_start_health(root, version=acgm.ACGM_VERSION)
+
+        with mock.patch.object(
+            acgm, "running_from_source_checkout", return_value=False
+        ):
+            report = acgm.doctor_report(str(root), update=False)
+
+        self.assertFalse(report["installation"]["explicitly_enabled_for_project"])
+        self.assertFalse(report["installation"]["registration_consistent"])
+        self.assertIn(
+            "plugin_not_explicitly_enabled_for_project",
+            report["installation"]["error_codes"],
+        )
+        self.assertEqual(
+            report["activation"]["status"], "CURRENT_INSTALLATION_NOT_CONFIRMED"
+        )
+        self.assertFalse(
+            report["activation"]["current_version_session_start_observed"]
+        )
+
+    def test_doctor_does_not_choose_last_duplicate_install_record(self) -> None:
+        root = self.make_governed_project()
+        self.configure_healthy_claude_home()
+        registry_path = self.config_dir / "plugins" / "installed_plugins.json"
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        records = registry["plugins"][acgm.PLUGIN_ID]
+        records.append(dict(records[0]))
+        registry_path.write_text(json.dumps(registry), encoding="utf-8")
+        self.append_session_start_health(root, version=acgm.ACGM_VERSION)
+
+        with mock.patch.object(
+            acgm, "running_from_source_checkout", return_value=False
+        ):
+            report = acgm.doctor_report(str(root), update=False)
+
+        self.assertEqual(report["installation"]["record_count"], 2)
+        self.assertFalse(report["installation"]["registration_consistent"])
+        self.assertIn(
+            "multiple_installed_plugin_records",
+            report["installation"]["error_codes"],
+        )
+        self.assertEqual(
+            report["activation"]["status"], "CURRENT_INSTALLATION_NOT_CONFIRMED"
+        )
+
+    def test_doctor_does_not_promote_inconsistent_install_path(self) -> None:
+        root = self.make_governed_project()
+        self.configure_healthy_claude_home()
+        registry_path = self.config_dir / "plugins" / "installed_plugins.json"
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        registry["plugins"][acgm.PLUGIN_ID][0]["installPath"] = str(
+            self.base / "different install"
+        )
+        registry_path.write_text(json.dumps(registry), encoding="utf-8")
+        self.append_session_start_health(root, version=acgm.ACGM_VERSION)
+
+        with mock.patch.object(
+            acgm, "running_from_source_checkout", return_value=False
+        ):
+            report = acgm.doctor_report(str(root), update=False)
+
+        self.assertFalse(report["installation"]["registration_consistent"])
+        self.assertIn(
+            "installed_plugin_path_differs_from_running_source",
+            report["installation"]["error_codes"],
+        )
+        self.assertEqual(
+            report["activation"]["status"], "CURRENT_INSTALLATION_NOT_CONFIRMED"
+        )
+
+    def test_doctor_does_not_promote_old_registered_version(self) -> None:
+        root = self.make_governed_project()
+        self.configure_healthy_claude_home()
+        registry_path = self.config_dir / "plugins" / "installed_plugins.json"
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        registry["plugins"][acgm.PLUGIN_ID][0]["version"] = "0.2.0"
+        registry_path.write_text(json.dumps(registry), encoding="utf-8")
+        self.append_session_start_health(root, version=acgm.ACGM_VERSION)
+
+        with mock.patch.object(
+            acgm, "running_from_source_checkout", return_value=False
+        ):
+            report = acgm.doctor_report(str(root), update=False)
+
+        self.assertFalse(report["installation"]["registration_consistent"])
+        self.assertIn(
+            "installed_version_differs_from_running_source",
+            report["installation"]["error_codes"],
+        )
+        self.assertEqual(
+            report["activation"]["status"], "CURRENT_INSTALLATION_NOT_CONFIRMED"
+        )
+
+    def test_doctor_does_not_count_old_version_session_start_evidence(self) -> None:
+        root = self.make_governed_project()
+        self.configure_healthy_claude_home()
+        self.append_session_start_health(root, version="0.2.0")
+
+        with mock.patch.object(
+            acgm, "running_from_source_checkout", return_value=False
+        ):
+            report = acgm.doctor_report(str(root), update=False)
+
+        activation = report["activation"]
+        self.assertEqual(
+            activation["status"], "CURRENT_VERSION_SESSION_START_NOT_OBSERVED"
+        )
+        self.assertFalse(activation["current_version_session_start_observed"])
+        self.assertFalse(activation["current_project_session_start_observed"])
+        self.assertIsNone(activation["latest_observed_at"])
+
+    def test_source_checkout_does_not_claim_activation_from_shared_ledger(self) -> None:
+        root = self.make_governed_project()
+        self.configure_healthy_claude_home()
+        self.append_session_start_health(root, version=acgm.ACGM_VERSION)
+
+        with mock.patch.object(
+            acgm, "running_from_source_checkout", return_value=True
+        ):
+            report = acgm.doctor_report(str(root), update=False)
+
+        activation = report["activation"]
+        self.assertTrue(report["installation"]["source_mode"])
+        self.assertEqual(
+            activation["status"], "SOURCE_CHECKOUT_NOT_RUNTIME_PROOF"
+        )
+        self.assertFalse(activation["current_version_session_start_observed"])
 
     def test_doctor_marks_corrupt_event_ledger_broken(self) -> None:
         root = self.make_governed_project()
@@ -644,6 +965,10 @@ class DoctorReportAndExportTests(RuntimeTestCase):
 
         self.assertEqual(report["project_state"], "BROKEN")
         self.assertIn("local_state_corrupt_or_unwritable", report["runtime"]["error_codes"])
+        self.assertEqual(report["activation"]["status"], "EVIDENCE_UNAVAILABLE")
+        self.assertFalse(
+            report["activation"]["current_version_session_start_observed"]
+        )
 
     def test_report_and_export_are_sanitized(self) -> None:
         event_id = self.store.append_event(

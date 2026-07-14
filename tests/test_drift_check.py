@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -12,6 +13,7 @@ SCRIPT = REPO_ROOT / "scripts" / "drift-check.sh"
 
 
 class DriftCheckTests(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "drift-check.sh is a POSIX-only scanner")
     def test_explicit_project_root_and_json_output_file_agree(self) -> None:
         with tempfile.TemporaryDirectory(prefix="acgm drift 中文 ") as temporary:
             base = Path(temporary)
@@ -37,7 +39,7 @@ class DriftCheckTests(unittest.TestCase):
                 ],
                 cwd=base,
                 check=True,
-                text=True,
+                encoding="utf-8",
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
@@ -45,7 +47,7 @@ class DriftCheckTests(unittest.TestCase):
             stdout_payload = json.loads(result.stdout)
             file_payload = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(stdout_payload, file_payload)
-            self.assertEqual(stdout_payload["project_root"], str(project.resolve()))
+            self.assertEqual(Path(stdout_payload["project_root"]).resolve(), project.resolve())
             self.assertEqual(stdout_payload["summary"]["total"], 0)
 
 
